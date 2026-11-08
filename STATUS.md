@@ -55,3 +55,8 @@ Tenantkontrol accepterer en eksisterende serial/tag-registrering med et konfigur
 Næste handling: afprøv samme ISO på Hyper-V/Proxmox med én disk, verificér dansk OOBE og den valgte Group Tag i den korrekte demo-tenant; mål hele forløbet. Windows/WinPE/ISO/Graph/tenant-runtime er IKKE kørt her.
 
 Validering: 9 startup-mockcases og 5 OOBE-mockcases bestået samt syntakskontrol af alle PowerShell-filer og git diff --check. Ingen disk-, app- eller tenantoperation udført. tests/Foundation.Tests.ps1 er samlet indgang til de aktuelle tests; ældre tests af den erstattede helper-arkitektur er erstattet. Alle ændringer publiceres via PR; ingen lokale ændringer forventes efter merge.
+
+
+## 2026-11-08 — Gallery-fejl og gammel startup
+
+Brugerens output indeholder tidligere tekster, smart quotes i da-dk og tom SetupComplete. Den publicerede main-fil er kontrolleret via GitHub og indeholder ikke disse trin/quotes. Årsagen til den gamle kopi (cache eller tidligere download) er ikke bekræftet. Tilføjet synlig startuprevision 2026-11-08.2 og vejledning til frisk hentning. WinPE bruger installeret OSD 26.10.16.1 uden Gallery-kald; manglende version og fejlet Gallery-installation stopper med forklaring før diskændringer. Ingen fallback til en vilkårlig ældre modulversion. OOBE-flow og JSON er uændret. Mocktests kontrollerer genbrug uden Install-Module og stop ved Gallery-fejl; Windows/WinPE-netværksfejlen er ikke reproduceret lokalt.

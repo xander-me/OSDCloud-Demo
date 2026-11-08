@@ -1,3 +1,5 @@
+Write-Host 'OSDCloud Demo startup revision: 2026-11-08.2' -ForegroundColor Cyan
+
 function OSDCloudLogic {
     $ErrorActionPreference = 'Stop'
     #================================================
@@ -16,8 +18,18 @@ function OSDCloudLogic {
     }
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     Write-Host 'Loading OSD PowerShell module' -ForegroundColor Cyan
-    Install-Module OSD -RequiredVersion '26.10.16.1' -Force -ErrorAction Stop
-    Import-Module OSD -RequiredVersion '26.10.16.1' -Force -ErrorAction Stop
+    $osdVersion = '26.10.16.1'
+    $installedOSD = Get-Module -Name OSD -ListAvailable |
+        Where-Object { $_.Version -eq [version]$osdVersion } | Select-Object -First 1
+    if (-not $installedOSD) {
+        try {
+            Install-Module OSD -RequiredVersion $osdVersion -Force -ErrorAction Stop
+        }
+        catch {
+            throw "OSD $osdVersion is not installed and PowerShell Gallery installation failed. Check WinPE DNS, proxy, clock and HTTPS access to www.powershellgallery.com, or include OSD $osdVersion in the boot image. No disk changes have started. Details: $($_.Exception.Message)"
+        }
+    }
+    Import-Module OSD -RequiredVersion $osdVersion -Force -ErrorAction Stop
 
     #================================================
     #   [OS] Windows settings and native OSDCloud wipe

@@ -37,7 +37,7 @@ Derefter kører `Start-OOBEDeploy`, og fravær af de angivne installerede/provis
 
 ## Afprøvning
 
-OSD er fastlagt til `26.10.16.1`; AutopilotOOBE til `24.1.29.1`. Transitive afhængigheder, registreringsscript og downloadkataloger er ikke alle fastlåst. Gallery-adgang kræves. GitHub-ændringer virker ved næste hentning af StartURL; allerede installerede VM'er bruger deres lokale OOBE-kopi.
+OSD er fastlagt til `26.10.16.1`; AutopilotOOBE til `24.1.29.1`. Transitive afhængigheder, registreringsscript og downloadkataloger er ikke alle fastlåst. WinPE genbruger OSD 26.10.16.1, hvis denne version allerede er installeret; ellers kræves Gallery-adgang. OOBE-trinnets modulinstallationer kræver fortsat Gallery-adgang. GitHub-ændringer virker ved næste hentning af StartURL; allerede installerede VM'er bruger deres lokale OOBE-kopi.
 
 Kør host-side mocktests med PowerShell:
 
@@ -47,3 +47,16 @@ pwsh -NoProfile -File tests/OOBE.Tests.ps1
 ```
 
 Næste test: samme ISO i Hyper-V og Proxmox, faktisk disk-wipe, dansk OOBE, Graph-login/registrering, appfjernelse og fejlscenarier. Mål varigheden før en 20-minutters live-demo. Gem ikke logs, serienumre, hashes eller tokens i GitHub.
+
+## Hvis en gammel startup vises
+
+Aktuel startup viser `OSDCloud Demo startup revision: 2026-11-08.2`. `Updating OSD PowerShell Module` og et tomt SetupComplete-trin tilhører den tidligere version. Hent en frisk kopi i WinPE:
+
+```powershell
+$url = 'https://raw.githubusercontent.com/xander-me/OSDCloud-Demo/main/OSDCloud_Start.ps1?v=20261108-2'
+Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile X:\OSDCloud_Start.ps1 -ErrorAction Stop
+Get-Content X:\OSDCloud_Start.ps1 -TotalCount 1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File X:\OSDCloud_Start.ps1
+```
+
+Den sidste kommando starter automatisk installation med sletning af VM'ens eneste lokale disk 0. Hvis Gallery stadig fejler uden lokal OSD 26.10.16.1, stopper scriptet før diskændringer. Kontroller DNS, proxy, WinPE-uret og HTTPS-adgang; fejlen alene identificerer ikke hvilken af disse der fejler.
