@@ -62,7 +62,7 @@ Check 'Physical, unknown and partial VM identities remain rejected' {
         MustThrow { Assert-DemoVM }
     }
 }
-Check 'Both platforms still reject missing, nonblank or multiple disks before module loading' {
+Check 'Both platforms reject missing, multiple or differently numbered target disks' {
     function global:Test-Path { param($Path); if ($Path -eq 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT') { return $true }; throw 'Unexpected filesystem access after disk guard.' }
     function global:Get-Disk { $global:DemoTestDisks }
     $previous=$env:SystemDrive
@@ -75,14 +75,13 @@ Check 'Both platforms still reject missing, nonblank or multiple disks before mo
             $global:DemoTestMachine=$machine
             foreach ($case in @(
                 @{Disks=@()},
-                @{Disks=@([pscustomobject]@{Number=0;PartitionStyle='GPT';BusType='SCSI'})},
                 @{Disks=@([pscustomobject]@{Number=1;PartitionStyle='RAW';BusType='SCSI'})},
                 @{Disks=@([pscustomobject]@{Number=0;PartitionStyle='RAW';BusType='SCSI'},[pscustomobject]@{Number=1;PartitionStyle='RAW';BusType='SCSI'})}
             )) {
                 $global:DemoTestDisks=$case.Disks
                 $failure=''
                 try { OSDCloudLogic -BundlePath $PSScriptRoot } catch { $failure=$_.Exception.Message }
-                if ($failure -ne 'Exactly one blank virtual disk numbered 0 is required.') { throw "Disk guard did not stop at the expected boundary: $failure" }
+                if ($failure -ne 'Exactly one local virtual disk numbered 0 is required.') { throw "Disk guard did not stop at the expected boundary: $failure" }
             }
         }
     } finally {
@@ -137,10 +136,10 @@ Check 'A protected app prevents removal' {
     MustThrow { Remove-DemoApps -Names Microsoft.BingNews }
     if ($global:DemoTestRemoved.Count -ne $before) { throw 'Removal occurred despite a protected app.' }
 }
-Check 'OSDCloudLogic forwards Danish Windows settings without firmware to the mocked engine' {
+Check 'RAW, GPT and MBR targets reach the mocked engine with OSDCloud native wipe enabled' {
     $global:DemoTestMachine=[pscustomobject]@{Manufacturer='QEMU';Model='Standard PC (Q35 + ICH9, 2009)'}
     function global:Test-Path { param($Path,$PathType); return $true }
-    function global:Get-Disk { [pscustomobject]@{Number=0;PartitionStyle='RAW';BusType='SCSI'} }
+    function global:Get-Disk { [pscustomobject]@{Number=0;PartitionStyle=$global:DemoTestPartitionStyle;BusType='SCSI'} }
     function global:Get-Module { param($Name,[switch]$ListAvailable); [pscustomobject]@{Version=[version]'26.10.16.1'} }
     function global:Import-Module { param($Name,$RequiredVersion,[switch]$Force,$ErrorAction) }
     function global:Start-OSDCloud {
@@ -152,12 +151,18 @@ Check 'OSDCloudLogic forwards Danish Windows settings without firmware to the mo
     $previousOverrides=Get-Variable MyOSDCloud -Scope Global -ErrorAction SilentlyContinue
     try {
         $env:SystemDrive='X:'
-        $failure=''
-        try { OSDCloudLogic -BundlePath $PSScriptRoot } catch { $failure=$_.Exception.Message }
-        if ($failure -ne 'TEST: stop before any deployment operation') { throw "Mock engine not reached: $failure" }
-        $args=$global:DemoTestWindowsArguments
-        if ($args.OSName -ne 'Windows 11 25H2 x64' -or $args.OSLanguage -ne 'da-dk' -or $args.OSEdition -ne 'Pro' -or $args.OSActivation -ne 'Retail' -or -not $args.ZTI -or -not $args.SkipAutopilot -or $args.Restart -or $args.Shutdown) { throw 'Incorrect Windows engine parameters.' }
-        if ($global:MyOSDCloud.DriverPackName -ne 'none' -or -not $global:MyOSDCloud.SkipRecoveryPartition) { throw 'VM settings not applied.' }
+        foreach ($style in 'RAW','GPT','MBR') {
+            $global:DemoTestPartitionStyle=$style
+            $failure=''
+            try { OSDCloudLogic -BundlePath $PSScriptRoot } catch { $failure=$_.Exception.Message }
+            if ($failure -ne 'TEST: stop before any deployment operation') { throw "Mock engine not reached: $failure" }
+            $args=$global:DemoTestWindowsArguments
+            if ($args.OSName -ne 'Windows 11 25H2 x64' -or $args.OSLanguage -ne 'da-dk' -or $args.OSEdition -ne 'Pro' -or $args.OSActivation -ne 'Retail' -or -not $args.ZTI -or -not $args.SkipAutopilot -or $args.Restart -or $args.Shutdown) { throw 'Incorrect Windows engine parameters.' }
+            if ($global:MyOSDCloud.DriverPackName -ne 'none' -or -not $global:MyOSDCloud.SkipRecoveryPartition) { throw 'VM settings not applied.' }
+            foreach ($name in 'SkipAllDiskSteps','SkipClearDisk','SkipNewOSDisk') {
+                if ($global:MyOSDCloud[$name] -ne $false) { throw "OSDCloud native disk step disabled: $name" }
+            }
+        }
     } finally {
         $env:SystemDrive=$previousDrive
         if ($previousOverrides) { $global:MyOSDCloud=$previousOverrides.Value } else { Remove-Variable MyOSDCloud -Scope Global -ErrorAction SilentlyContinue }

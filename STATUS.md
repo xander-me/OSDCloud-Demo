@@ -1,6 +1,6 @@
 # Status
 
-Aktuelt: automatisk StartURL uden DEMO-prompt; Windows 11 25H2 x64 / da-dk / Pro. Group Tag vælges ved OOBE. VM-/tom-disk-guard og fejlpauser bevares. Tidligere notater nedenfor beskriver udviklingen.
+Aktuelt: automatisk StartURL uden DEMO-prompt; Windows 11 25H2 x64 / da-dk / Pro. Group Tag vælges ved OOBE. VM-/én-måldisk-guard og fejlpauser bevares. OSDClouds egen wipe/partitionering bruges også på tidligere installeret disk; blank disk kræves ikke længere. Tidligere notater nedenfor beskriver udviklingen.
 
 2026-11-08 — foundation/prototype.
 
@@ -37,3 +37,6 @@ Seneste mandat: brugeren har bedt om at fjerne den overflødige DEMO-bekræftels
 
 
 Rettelse efter brugerens GitHub-commit bda89b7: OSDCloud_Start.ps1 var erstattet af en funktionsdefinition uden kald, med OSBuild="2HH2" og den tidligere fravalgte JSON/forfatter-helper-kæde. Det forklarer et vindue, der lukker uden aktivitet. Brugeren bekræftede at bevare Group Tag ved OOBE og direkte Graph-registrering. Den automatiske launcher fra be4a305 er genindført; den kalder modulets eksisterende OSDCloudLogic med Windows 11 25H2 / da-dk. Brugerens commit er bevaret i Git-historikken. Den aktuelle startupkode indeholder ikke længere det ugyldige OSBuild. Fejlpauser/log bevares. Startup-regressionstesten fejlede på bda89b7 uden at udføre deployment; efter rettelsen bestod alle 4 startupcases og 13 foundation-grupper inklusive syntaks. Ingen VM- eller tenantoperation udført.
+
+
+Seneste mandat: Alexander bad om at slette disken som normal OSDCloud og understregede, at OSDClouds egen wipe-feature skal bruges. RAW-kravet er fjernet; én lokal disk 0 på genkendt VM kræves stadig. MyOSDCloud sætter SkipAllDiskSteps/SkipClearDisk/SkipNewOSDisk=false, og den eksisterende Start-OSDCloud -ZTI udfører sin normale Clear-LocalDisk/partitionering. Ingen separat wipekommando eller diskkørsel tilføjet/udført her. Den fastlagte OSD-kilde er inspiceret: dens normale WinPE-disksektion rydder disken før nye partitioner, med bekræftelse fravalgt via ZTI på én disk. RAW/GPT/MBR testes frem til mocked engine med native-diskflag; manglende/flere/forkert nummererede diske afvises på begge platforme. Virkelig wipe/Windows/VM/tenant-runtime afventer fortsat brugerens test.
