@@ -88,3 +88,6 @@ Den danske installationsvariant, applisten på det konkrete image og den fulde H
 
 
 StartURL starter nu forløbet uden at spørge efter DEMO. Kontrollen for WinPE, Hyper-V/Proxmox og præcis én tom lokal disk nummer 0 er uændret. Fejl holder stadig vinduet åbent; Group Tag indtastes fortsat først ved Windows OOBE. Med main-StartURL kræves ingen ny ISO for denne ændring.
+
+
+`OSDCloud_Start.ps1` er launcher-filen: den henter/importerer modulet og **kalder** `OSDCloudLogic`. Selve funktionen og Windows-indstillingerne ligger i `OSDCloudModules/Module.psm1`. Hvis launcher-filen erstattes af kun `function OSDCloudLogic { ... }`, bliver funktionen defineret uden at køre, og StartURL-vinduet lukker. Brug modulet til ændringer af Windows-indstillinger; Windows 11 25H2 / da-dk er allerede sat dér.
