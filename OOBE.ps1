@@ -13,20 +13,21 @@ if (Test-Path $success) { throw 'This demo already completed. Review the log bef
 Start-Transcript -Path "$PSScriptRoot\OOBE.log" -Append -ErrorAction Stop | Out-Null
 try {
     Write-Host "Demo revision: $(Get-Content "$PSScriptRoot\revision.txt" -Raw)"
-    Write-Host "Sign in to the DEMO tenant. Group Tag: $($settings.GroupTag)"
+    $groupTag = Read-DemoGroupTag
+    Write-Host "Sign in to the DEMO tenant. Group Tag: $groupTag"
     Install-Script Get-WindowsAutopilotInfo -RequiredVersion $settings.AutopilotScriptVersion -Scope AllUsers -Force -ErrorAction Stop
     $installed = Get-InstalledScript Get-WindowsAutopilotInfo -RequiredVersion $settings.AutopilotScriptVersion -ErrorAction Stop
     $scriptPath = Join-Path $installed.InstalledLocation 'Get-WindowsAutopilotInfo.ps1'
-    & $scriptPath -Online -GroupTag $settings.GroupTag
+    & $scriptPath -Online -GroupTag $groupTag
 
     # Do not treat closing a window or returning from the script as proof of registration.
     $serial = (Get-CimInstance Win32_BIOS -ErrorAction Stop).SerialNumber
     if ([string]::IsNullOrWhiteSpace($serial)) { throw 'Device serial is unavailable.' }
     $null = Get-Command Get-AutopilotDevice -ErrorAction Stop
-    $null = Confirm-DemoRegistration -Serial $serial -GroupTag $settings.GroupTag
-    Write-Host "Autopilot registration verified: $serial / $($settings.GroupTag)"
+    $null = Confirm-DemoRegistration -Serial $serial -GroupTag $groupTag
+    Write-Host "Autopilot registration verified: $serial / $groupTag"
     Remove-DemoApps -Names $settings.RemoveApps
-    "Completed $(Get-Date -Format o). Registration verified; allowlisted apps absent." | Set-Content $success -Encoding UTF8
+    "Completed $(Get-Date -Format o). Registration verified with Group Tag $groupTag; allowlisted apps absent." | Set-Content $success -Encoding UTF8
     Write-Host 'DEMO complete. Restarting to OOBE in 10 seconds.'
     Start-Sleep -Seconds 10
 } catch {

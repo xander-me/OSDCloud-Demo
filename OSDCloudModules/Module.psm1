@@ -7,7 +7,6 @@ function Get-DemoSettings {
             OSLanguage   = 'en-us'                 # English (United States)
             OSActivation = 'Retail'
         }
-        GroupTag = 'AutopilotOOBE'
         RemoveApps = @(
             'Microsoft.MicrosoftSolitaireCollection'  # Solitaire
             'Microsoft.BingNews'                      # News
@@ -50,7 +49,7 @@ function Start-DemoInstallation {
     }
     $settings = Get-DemoSettings
     $settings.Windows | Format-Table -AutoSize | Out-Host
-    Write-Host "Autopilot Group Tag: $($settings.GroupTag)"
+    Write-Host 'Autopilot Group Tag will be entered at Windows OOBE.'
     Write-Host 'Installing on the sole blank virtual disk 0.'
     if (-not (Get-Module OSD -ListAvailable | Where-Object { $_.Version -eq [version]$settings.OSDVersion })) {
         Install-Module OSD -RequiredVersion $settings.OSDVersion -Scope AllUsers -Force -ErrorAction Stop
@@ -79,6 +78,14 @@ if errorlevel 1 (
     Write-Host 'Windows installed. At OOBE press Shift+F10 and run OOBE to register this demo VM.'
     & wpeutil.exe reboot
     if ($LASTEXITCODE -ne 0) { throw 'WinPE reboot failed.' }
+}
+
+function Read-DemoGroupTag {
+    $groupTag = ([string](Read-Host 'Enter the Autopilot Group Tag')).Trim()
+    if ([string]::IsNullOrWhiteSpace($groupTag) -or $groupTag -match '[\x00-\x1f\x7f]') {
+        throw 'Enter a non-empty Group Tag without control characters. No registration was started.'
+    }
+    return $groupTag
 }
 
 function Confirm-DemoRegistration {
@@ -117,4 +124,4 @@ function Remove-DemoApps {
     Write-Host 'App cleanup verified. Apps absent from the allowlist were not selected for removal.'
 }
 
-Export-ModuleMember -Function Get-DemoSettings,Assert-DemoVM,Start-DemoInstallation,Confirm-DemoRegistration,Remove-DemoApps
+Export-ModuleMember -Function Get-DemoSettings,Assert-DemoVM,Start-DemoInstallation,Read-DemoGroupTag,Confirm-DemoRegistration,Remove-DemoApps
