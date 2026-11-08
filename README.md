@@ -20,7 +20,7 @@ Samme sted ligger applisten fra den aftalte funktion, herunder Solitaire, Weathe
 
 ## Start fra én URL
 
-I en forberedt amd64 OSDCloud WinPE på en **dedikeret Hyper-V- eller Proxmox-VM med én tom virtuel disk**:
+I en forberedt amd64 OSDCloud WinPE på en **dedikeret Hyper-V- eller Proxmox-VM med én virtuel måldisk (disk 0; alle eksisterende data slettes)**:
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -70,7 +70,7 @@ Ved OSDCloud V1 `StartURL`, der peger på `main`-URL'en, hentes opdateret startu
 
 ## Hyper-V og Proxmox
 
-Begge platforme accepteres nu i VM-kontrollen, både ved WinPE-installation og i OOBE-trinnet. Proxmox genkendes via de normale QEMU/Q35-, QEMU/i440FX- eller KVM-identiteter. Kravet er fortsat præcis én lokal RAW-disk nummer 0. En ændret SMBIOS-identitet kan kræve gennemgang; fejlteksten viser de registrerede manufacturer/model-værdier.
+Begge platforme accepteres nu i VM-kontrollen, både ved WinPE-installation og i OOBE-trinnet. Proxmox genkendes via de normale QEMU/Q35-, QEMU/i440FX- eller KVM-identiteter. Kravet er fortsat præcis én lokal disk nummer 0, uanset om den er RAW, GPT eller MBR. En ændret SMBIOS-identitet kan kræve gennemgang; fejlteksten viser de registrerede manufacturer/model-værdier.
 
 Ved Proxmox skal WinPE kunne se disk og netværk. VirtIO-controller/netkort kan kræve drivere i bootmediet; valg af VM-platform i scriptet installerer ikke WinPE-drivere. Hverken den samlede Hyper-V- eller Proxmox-installation er verificeret her. Hvis `StartURL` peger på `main`, hentes rettelsen ved næste boot uden ISO-genbygning.
 
@@ -87,7 +87,14 @@ Den genererede SetupComplete bevares; den tømmes ikke. Firmware og OEM-driverpa
 Den danske installationsvariant, applisten på det konkrete image og den fulde Hyper-V/Proxmox-kørsel skal stadig prøves. Det er Windows-image-sproget, der vælges; WinPE's eget visnings-/tastatursprog ændres ikke af `OSLanguage`.
 
 
-StartURL starter nu forløbet uden at spørge efter DEMO. Kontrollen for WinPE, Hyper-V/Proxmox og præcis én tom lokal disk nummer 0 er uændret. Fejl holder stadig vinduet åbent; Group Tag indtastes fortsat først ved Windows OOBE. Med main-StartURL kræves ingen ny ISO for denne ændring.
+StartURL starter nu forløbet uden at spørge efter DEMO. Kontrollen for WinPE, Hyper-V/Proxmox og præcis én lokal måldisk nummer 0 er uændret. Fejl holder stadig vinduet åbent; Group Tag indtastes fortsat først ved Windows OOBE. Med main-StartURL kræves ingen ny ISO for denne ændring.
 
 
 `OSDCloud_Start.ps1` er launcher-filen: den henter/importerer modulet og **kalder** `OSDCloudLogic`. Selve funktionen og Windows-indstillingerne ligger i `OSDCloudModules/Module.psm1`. Hvis launcher-filen erstattes af kun `function OSDCloudLogic { ... }`, bliver funktionen defineret uden at køre, og StartURL-vinduet lukker. Brug modulet til ændringer af Windows-indstillinger; Windows 11 25H2 / da-dk er allerede sat dér.
+
+
+## Sletning af den eksisterende disk
+
+Brugerens valg: **OSDClouds egen wipe-funktion** sletter og repartitionerer måldisken som del af den normale Windows-installation. Demoen kræver ikke længere en tom disk; RAW, GPT og MBR accepteres. `SkipAllDiskSteps`, `SkipClearDisk` og `SkipNewOSDisk` sættes eksplicit til false i MyOSDCloud, og Start-OSDCloud køres med ZTI. Der er ikke tilføjet egne Clear-Disk- eller diskpart-wipekommandoer.
+
+StartURL starter automatisk: eksisterende data på VM'ens eneste lokale disk 0 slettes uden ekstra DEMO-bekræftelse. VM-kontrol og krav om én lokal måldisk bevares. Dette er OSDClouds normale partitionssletning, ikke en påstand om sikker mediesanering. OOBE-/Graph-flowet er uændret. Det faktiske wipe-/installforløb på Hyper-V/Proxmox skal stadig afprøves.

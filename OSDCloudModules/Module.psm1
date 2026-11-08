@@ -68,20 +68,24 @@ function OSDCloudLogic {
     if ($env:SystemDrive -ne 'X:' -or -not (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT')) { throw 'Start installation from WinPE.' }
     Assert-DemoVM
     $disks = @(Get-Disk | Where-Object { $_.BusType -ne 'USB' })
-    if ($disks.Count -ne 1 -or $disks[0].Number -ne 0 -or $disks[0].PartitionStyle -ne 'RAW') { throw 'Exactly one blank virtual disk numbered 0 is required.' }
+    if ($disks.Count -ne 1 -or $disks[0].Number -ne 0) { throw 'Exactly one local virtual disk numbered 0 is required.' }
     foreach ($file in 'OOBE.ps1','OSDCloudModules/Module.psm1','revision.txt') {
         if (-not (Test-Path (Join-Path $BundlePath $file) -PathType Leaf)) { throw "Missing demo file: $file" }
     }
     $settings = Get-DemoSettings
     $settings.Windows | Format-Table -AutoSize | Out-Host
     Write-Host 'Autopilot Group Tag will be entered at Windows OOBE.'
-    Write-Host 'Installing on the sole blank virtual disk 0.'
+    Write-Host 'OSDCloud will wipe and repartition the sole local virtual disk 0. Existing data will be erased.'
     if (-not (Get-Module OSD -ListAvailable | Where-Object { $_.Version -eq [version]$settings.OSDVersion })) {
         Install-Module OSD -RequiredVersion $settings.OSDVersion -Scope AllUsers -Force -ErrorAction Stop
     }
     Import-Module OSD -RequiredVersion $settings.OSDVersion -Force -ErrorAction Stop
     # This demo accepts VMs only. No OEM driver-pack download or firmware update.
     $global:MyOSDCloud = @{
+        # Use OSDCloud's own wipe and partitioning steps, including on an existing Windows disk.
+        SkipAllDiskSteps = $false
+        SkipClearDisk = $false
+        SkipNewOSDisk = $false
         DriverPackName = 'none'
         SkipRecoveryPartition = $true
         SetupCompleteNoRestart = $true

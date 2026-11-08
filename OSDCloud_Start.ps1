@@ -1,4 +1,4 @@
-# One URL starts the demo automatically from WinPE; VM and blank-disk checks remain.
+# One URL starts the demo automatically from WinPE; VM and single-target-disk checks remain; OSDCloud wipes the target.
 [CmdletBinding()]
 param([string]$Revision = 'main')
 $ErrorActionPreference = 'Stop'
