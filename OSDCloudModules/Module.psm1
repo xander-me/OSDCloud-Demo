@@ -4,13 +4,36 @@ function Get-DemoSettings {
         Windows = @{
             OSName       = 'Windows 11 25H2 x64'
             OSEdition    = 'Pro'
-            OSLanguage   = 'en-us'                 # English (United States)
+            OSLanguage   = 'da-dk'                 # Dansk (Danmark)
             OSActivation = 'Retail'
         }
+        # Exact app names from the supplied demo list; missing apps are ignored.
         RemoveApps = @(
-            'Microsoft.MicrosoftSolitaireCollection'  # Solitaire
-            'Microsoft.BingNews'                      # News
-            'Clipchamp.Clipchamp'                     # Clipchamp
+            'Microsoft.549981C3F5F10'
+            'Microsoft.BingWeather'
+            'Microsoft.GetHelp'
+            'Microsoft.Getstarted'
+            'Microsoft.Microsoft3DViewer'
+            'Microsoft.MicrosoftOfficeHub'
+            'Microsoft.MicrosoftSolitaireCollection'
+            'Microsoft.MixedReality.Portal'
+            'Microsoft.Office.OneNote'
+            'Microsoft.People'
+            'Microsoft.SkypeApp'
+            'Microsoft.Wallet'
+            'Microsoft.WindowsCamera'
+            'microsoft.windowscommunicationsapps'
+            'Microsoft.WindowsFeedbackHub'
+            'Microsoft.WindowsMaps'
+            'Microsoft.Xbox.TCUI'
+            'Microsoft.XboxApp'
+            'Microsoft.XboxGameOverlay'
+            'Microsoft.XboxGamingOverlay'
+            'Microsoft.XboxIdentityProvider'
+            'Microsoft.XboxSpeechToTextOverlay'
+            'Microsoft.YourPhone'
+            'Microsoft.ZuneMusic'
+            'Microsoft.ZuneVideo'
         )
         OSDVersion = '26.10.16.1'
         AutopilotScriptVersion = '3.9'
@@ -36,7 +59,9 @@ function Assert-DemoVM {
     Write-Host "Demo VM recognized: $manufacturer / $model"
 }
 
-function Start-DemoInstallation {
+# PreOS -> Windows -> stage OOBE -> reboot.
+# No ComputerPrefix: the Group Tag is entered later in Windows OOBE.
+function OSDCloudLogic {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$BundlePath)
     $ErrorActionPreference = 'Stop'
@@ -55,9 +80,18 @@ function Start-DemoInstallation {
         Install-Module OSD -RequiredVersion $settings.OSDVersion -Scope AllUsers -Force -ErrorAction Stop
     }
     Import-Module OSD -RequiredVersion $settings.OSDVersion -Force -ErrorAction Stop
-    $global:MyOSDCloud = @{ SetupCompleteNoRestart=$true; ShutdownSetupComplete=$false; WindowsUpdate=$false; WindowsUpdateDrivers=$false; WindowsDefenderUpdate=$false }
+    # This demo accepts VMs only. No OEM driver-pack download or firmware update.
+    $global:MyOSDCloud = @{
+        DriverPackName = 'none'
+        SkipRecoveryPartition = $true
+        SetupCompleteNoRestart = $true
+        ShutdownSetupComplete = $false
+        WindowsUpdate = $false
+        WindowsUpdateDrivers = $false
+        WindowsDefenderUpdate = $false
+    }
     $windows = $settings.Windows
-    Start-OSDCloudCLI @windows -SkipAutopilot -ZTI -Restart:$false -Shutdown:$false
+    Start-OSDCloud @windows -SkipAutopilot -ZTI -Restart:$false -Shutdown:$false
     if (-not $global:OSDCloud.TimeEnd -or -not (Test-Path 'C:\Windows\System32\Config\SYSTEM')) { throw 'OSDCloud did not report a completed Windows deployment.' }
     $destination = 'C:\ProgramData\OSDCloud-Demo'
     New-Item "$destination\OSDCloudModules" -ItemType Directory -Force | Out-Null
@@ -108,20 +142,22 @@ function Remove-DemoApps {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string[]]$Names)
     $ErrorActionPreference = 'Stop'
-    $installed = @(Get-AppxPackage -AllUsers | Where-Object { $_.Name -cin $Names })
+    $installed = @(Get-AppxPackage -AllUsers | Where-Object { $_.Name -in $Names })
     if (@($installed | Where-Object { $_.NonRemovable -eq $true }).Count) { throw 'An allowlisted app is marked NonRemovable. Review the app list.' }
-    Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -cin $Names } | ForEach-Object {
+    Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -in $Names } | ForEach-Object {
         Write-Host "Removing provisioned app: $($_.DisplayName)"
         Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -AllUsers -ErrorAction Stop | Out-Null
     }
-    Get-AppxPackage -AllUsers | Where-Object { $_.Name -cin $Names } | ForEach-Object {
+    Get-AppxPackage -AllUsers | Where-Object { $_.Name -in $Names } | ForEach-Object {
         Write-Host "Removing installed app: $($_.Name)"
         Remove-AppxPackage -Package $_.PackageFullName -AllUsers -ErrorAction Stop
     }
-    $remaining = @(Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -cin $Names })
-    $remaining += @(Get-AppxPackage -AllUsers | Where-Object { $_.Name -cin $Names })
+    $remaining = @(Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -in $Names })
+    $remaining += @(Get-AppxPackage -AllUsers | Where-Object { $_.Name -in $Names })
     if ($remaining.Count) { throw 'Some allowlisted apps remain. Do not mark cleanup complete.' }
     Write-Host 'App cleanup verified. Apps absent from the allowlist were not selected for removal.'
 }
 
-Export-ModuleMember -Function Get-DemoSettings,Assert-DemoVM,Start-DemoInstallation,Read-DemoGroupTag,Confirm-DemoRegistration,Remove-DemoApps
+# Compatibility for a startup script downloaded before this function was renamed.
+Set-Alias -Name Start-DemoInstallation -Value OSDCloudLogic
+Export-ModuleMember -Function Get-DemoSettings,Assert-DemoVM,OSDCloudLogic,Read-DemoGroupTag,Confirm-DemoRegistration,Remove-DemoApps -Alias Start-DemoInstallation

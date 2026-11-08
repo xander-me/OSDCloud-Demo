@@ -11,12 +11,12 @@ En enkel GT Tech Day-demo: **Windows → Autopilot → appfjernelse → OOBE**.
 ```powershell
 OSName       = 'Windows 11 25H2 x64'
 OSEdition    = 'Pro'
-OSLanguage   = 'en-us'          # English (United States)
+OSLanguage   = 'da-dk'          # Dansk (Danmark)
 OSActivation = 'Retail'
 
 ```
 
-Samme sted ligger den korte liste over apps, der fjernes, hvis de er installeret: Solitaire, News og Clipchamp. Der matches eksakte pakkenavne.
+Samme sted ligger applisten fra den aftalte funktion, herunder Solitaire, Weather, Xbox, Camera og OneNote. Kun eksisterende apps på listen fjernes; nogle ældre apps findes ikke på Windows 11 25H2. Der matches eksakte pakkenavne.
 
 ## Start fra én URL
 
@@ -58,7 +58,7 @@ WinPE skal have PowerShell, WMI/StorageWMI, netværk, TLS og fungerende Gallery-
 
 Afprøv Windows-installation, faktisk OOBE-handoff, Graph-login/import, appfjernelse og genstart. Bekræft demo-tenant og grupperegel før import. Rehearsal skal måle den samlede tid; Graph-scriptets import-/synkroniseringsventetid kan overstige 20 minutter. Opbevar ikke hardwarehash, tokens, serienumre eller kundedata i GitHub.
 
-Kilder: [Microsofts online-registrering](https://learn.microsoft.com/en-us/autopilot/add-devices), [Group Tag og grupper](https://learn.microsoft.com/en-us/autopilot/enrollment-autopilot). Layout inspireret af [AkosBakos/OSDCloud](https://github.com/AkosBakos/OSDCloud); ingen af dets scripts er kopieret.
+Kilder: [Microsofts online-registrering](https://learn.microsoft.com/en-us/autopilot/add-devices), [Group Tag og grupper](https://learn.microsoft.com/en-us/autopilot/enrollment-autopilot). Demoen bruger egne startup-/OOBE-scripts og de dokumenterede OSD/Graph-kommandoer.
 
 
 ## Hvis startupvinduet lukker
@@ -76,3 +76,12 @@ Ved Proxmox skal WinPE kunne se disk og netværk. VirtIO-controller/netkort kan 
 
 
 Group Tag vælges nu først ved Windows OOBE; den indgår ikke i WinPE-profilen. Nye installationer henter automatisk de opdaterede scripts fra main. En VM, der allerede er installeret, bruger sin tidligere staged kopi under `C:\ProgramData\OSDCloud-Demo`; opdatér både OOBE.ps1 og modulet fra samme nye commit (samt revision.txt), før denne VM kan bruge den nye prompt. En ændring på GitHub opdaterer ikke de lokale OOBE-filer af sig selv.
+
+
+## Dansk OSDCloudLogic
+
+`OSDCloudLogic` er nu installationsfunktionen. Den bruger `Start-OSDCloud` som CLI med Windows 11 25H2 x64, Pro, `da-dk` og Retail. `ComputerPrefix`, forfatternavne, `GroupX`, serienummer-substring og tredjeparts-helper-URL'er indgår ikke. Group Tag spørges fortsat først ved OOBE og bruges til online Graph-registrering; der stages ingen Autopilot-JSON. Den eksisterende `OOBE.ps1` håndterer registrering, verifikation og den aftalte appliste.
+
+Den genererede SetupComplete bevares; den tømmes ikke. Firmware og OEM-driverpakker er fravalgt for dette VM-demo-scope. Windows-/driveropdateringer startes ikke automatisk, fordi varigheden ellers bliver uforudsigelig i et 20-minutters slot. De kan tilføjes som et særskilt senere valg. `Set PATH`-fejlen og de mange ubekræftede `Start /Wait`-trin fra eksemplet er erstattet af den eksisterende korte OOBE-launcher med fejlhåndtering. OSD-versionen er fortsat fastlagt af hensyn til gentagelighed; dens transitive afhængigheder er ikke alle låst.
+
+Den danske installationsvariant, applisten på det konkrete image og den fulde Hyper-V/Proxmox-kørsel skal stadig prøves. Det er Windows-image-sproget, der vælges; WinPE's eget visnings-/tastatursprog ændres ikke af `OSLanguage`.
