@@ -29,7 +29,7 @@ Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile X:\OSDCloud_Start.ps1 -Err
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File X:\OSDCloud_Start.ps1
 ```
 
-Skriv **DEMO**. Startup viser source-commit og settings, installerer Windows og gemmer OOBE-trinnet lokalt fra samme source-commit. Hentning af filer fejler uden fallback. Til den endelige generalprøve bruges samme faste commit i både download-URL og scriptets `-Revision`-parameter. Branch-URL'en bruges til centrale ændringer; kun betroede writers bør kunne ændre den.
+Startup starter automatisk uden profilvalg og viser source-commit og settings, installerer Windows og gemmer OOBE-trinnet lokalt fra samme source-commit. Hentning af filer fejler uden fallback. Til den endelige generalprøve bruges samme faste commit i både download-URL og scriptets `-Revision`-parameter. Branch-URL'en bruges til centrale ændringer; kun betroede writers bør kunne ændre den.
 
 ## Ved Windows OOBE
 
@@ -47,7 +47,7 @@ Tryk **Shift+F10**, skriv **`OOBE`**, og log ind med en administrator fra den ri
 
 | Fil | Formål |
 | --- | --- |
-| [OSDCloud_Start.ps1](OSDCloud_Start.ps1) | URL-entrypoint; vælg DEMO |
+| [OSDCloud_Start.ps1](OSDCloud_Start.ps1) | URL-entrypoint; automatisk start |
 | [OSDCloudModules/Module.psm1](OSDCloudModules/Module.psm1) | Windows-settings, tag, appliste og hjælpefunktioner |
 | [OOBE.ps1](OOBE.ps1) | Graph-registrering, verificering, cleanup og genstart |
 | [STATUS.md](STATUS.md) | Afprøvning og næste handling |
@@ -63,7 +63,7 @@ Kilder: [Microsofts online-registrering](https://learn.microsoft.com/en-us/autop
 
 ## Hvis startupvinduet lukker
 
-Startup viser nu fire trin og bliver stående ved fejl, indtil du trykker Enter. Kopiér fejlteksten før vinduet lukkes. Log: `%TEMP%\OSDCloud-Demo-Startup.log` (normalt `X:\Windows\Temp\OSDCloud-Demo-Startup.log` i WinPE). `DEMO` accepteres også med små bogstaver og omgivende mellemrum. TLS 1.2 aktiveres før GitHub-kald.
+Startup viser nu fire trin og bliver stående ved fejl, indtil du trykker Enter. Kopiér fejlteksten før vinduet lukkes. Log: `%TEMP%\OSDCloud-Demo-Startup.log` (normalt `X:\Windows\Temp\OSDCloud-Demo-Startup.log` i WinPE). TLS 1.2 aktiveres før GitHub-kald.
 
 Ved OSDCloud V1 `StartURL`, der peger på `main`-URL'en, hentes opdateret startupkode ved næste boot; ISO'en skal ikke genbygges for denne scriptrettelse. Genstart kun det dedikerede test-VM-forløb. Den oprindelige fejlårsag skal stadig identificeres ud fra den synlige fejl/log; diagnosticering alene beviser ikke, at deployment virker i WinPE.
 
@@ -85,3 +85,6 @@ Group Tag vælges nu først ved Windows OOBE; den indgår ikke i WinPE-profilen.
 Den genererede SetupComplete bevares; den tømmes ikke. Firmware og OEM-driverpakker er fravalgt for dette VM-demo-scope. Windows-/driveropdateringer startes ikke automatisk, fordi varigheden ellers bliver uforudsigelig i et 20-minutters slot. De kan tilføjes som et særskilt senere valg. `Set PATH`-fejlen og de mange ubekræftede `Start /Wait`-trin fra eksemplet er erstattet af den eksisterende korte OOBE-launcher med fejlhåndtering. OSD-versionen er fortsat fastlagt af hensyn til gentagelighed; dens transitive afhængigheder er ikke alle låst.
 
 Den danske installationsvariant, applisten på det konkrete image og den fulde Hyper-V/Proxmox-kørsel skal stadig prøves. Det er Windows-image-sproget, der vælges; WinPE's eget visnings-/tastatursprog ændres ikke af `OSLanguage`.
+
+
+StartURL starter nu forløbet uden at spørge efter DEMO. Kontrollen for WinPE, Hyper-V/Proxmox og præcis én tom lokal disk nummer 0 er uændret. Fejl holder stadig vinduet åbent; Group Tag indtastes fortsat først ved Windows OOBE. Med main-StartURL kræves ingen ny ISO for denne ændring.
