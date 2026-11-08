@@ -1,4 +1,4 @@
-Write-Host 'OSDCloud Demo startup revision: 2026-11-08.2' -ForegroundColor Cyan
+Write-Host 'OSDCloud Demo startup revision: 2026-11-08.3' -ForegroundColor Cyan
 
 function OSDCloudLogic {
     $ErrorActionPreference = 'Stop'
@@ -46,12 +46,57 @@ function OSDCloudLogic {
         WindowsUpdateDrivers = $false
         WindowsDefenderUpdate = $false
     }
+    # LAN source: the supplied share name ends with U+2265 (greater-than-or-equal).
+    # Remove the + [char]0x2265 suffix below if that character was a typing error.
+    $ImageShare = '\\PCS-SRV1\Evaluation Edition' + [char]0x2265
+    $ImageFileName = '26200.6584.250915-1905.25h2_ge_release_svc_refresh_CLIENTENTERPRISEEVAL_OEMRET_x64FRE_en-us.iso'
+    $ImagePath = "$ImageShare\$ImageFileName"
+    Write-Host "LAN image: $ImagePath" -ForegroundColor Cyan
+    try {
+        $imageFile = Get-Item -LiteralPath $ImagePath -ErrorAction Stop
+        if ($imageFile.PSIsContainer -or $imageFile.Length -le 0) { throw 'Expected a non-empty ISO file.' }
+    }
+    catch {
+        throw "Cannot read LAN ISO without credentials: $ImagePath. Check the exact share name, DNS, SMB access and guest-access policy in WinPE. No disk changes have started. Details: $($_.Exception.Message)"
+    }
+
+    # Prove ISO mounting and the intended image work before native disk wipe.
+    # Some WinPE builds cannot mount ISO files. They stop here; use an extracted
+    # WIM/ESD workflow instead of enabling deployment with an unchecked image.
+    $mountedHere = $false
+    try {
+        $diskImage = Get-DiskImage -ImagePath $ImagePath -ErrorAction Stop
+        if (-not $diskImage.Attached) {
+            $diskImage = Mount-DiskImage -ImagePath $ImagePath -Access ReadOnly -PassThru -ErrorAction Stop
+            $mountedHere = $true
+        }
+        $volumes = @($diskImage | Get-Volume -ErrorAction Stop | Where-Object { $_.DriveLetter })
+        if ($volumes.Count -ne 1) { throw 'Expected one mounted ISO volume with a drive letter.' }
+        $imageRoot = "$($volumes[0].DriveLetter):\sources"
+        $installPath = "$imageRoot\install.wim"
+        if (-not (Test-Path -LiteralPath $installPath)) { $installPath = "$imageRoot\install.esd" }
+        $images = @(Get-WindowsImage -ImagePath $installPath -ErrorAction Stop)
+        $candidates = @($images | ForEach-Object {
+            Get-WindowsImage -ImagePath $installPath -Index $_.ImageIndex -ErrorAction Stop
+        } | Where-Object {
+            $_.EditionId -eq 'EnterpriseEval' -and $_.Architecture -eq 9 -and
+            ([version]$_.Version).Build -eq 26200 -and 'en-US' -in $_.Languages
+        })
+        if ($candidates.Count -ne 1) { throw 'Expected exactly one Windows 11 25H2 x64 English Enterprise Evaluation image.' }
+        $imageIndex = $candidates[0].ImageIndex
+        Write-Host "Selected image index $imageIndex : $($candidates[0].ImageName), $($candidates[0].Version), en-US" -ForegroundColor Green
+    }
+    catch {
+        throw "LAN ISO preflight failed before disk changes. ISO mounting and DISM must work in this WinPE build; otherwise extract install.wim/install.esd on the file server first. Details: $($_.Exception.Message)"
+    }
+    finally {
+        if ($mountedHere) { Dismount-DiskImage -ImagePath $ImagePath -ErrorAction Stop }
+    }
+    $Global:MyOSDCloud.ImageFileItem = $imageFile
+    $Global:MyOSDCloud.ImageFileName = $imageFile.Name
     $Params = @{
-        OSVersion = 'Windows 11'
-        OSBuild = '25H2'
-        OSEdition = 'Pro'
-        OSLanguage = 'da-dk'
-        OSActivation = 'Retail'
+        # Custom-image parameter set: edition/language/version come from the ISO.
+        OSImageIndex = $imageIndex
         ZTI = $true
         Firmware = $false
         Restart = $false
