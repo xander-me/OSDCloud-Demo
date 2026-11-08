@@ -1,6 +1,6 @@
 # OSDCloud Demo
 
-Keep this foundation small. Settings live at the top of OSDCloudModules/Module.psm1. Documentation is Danish; conversation follows the user's language.
+Keep this foundation small. Keep the installation function and Windows settings inline in OSDCloud_Start.ps1, in the [OS] section. Do not replace it with a module launcher. OSDCloudModules/Module.psm1 supplies OOBE helpers and the app list only. Documentation is Danish; conversation follows the user's language.
 
 Read README.md and STATUS.md before changes. Startup is automatic with no initial DEMO confirmation; keep the VM and single-target-disk guards. Use OSDCloud's native wipe/partition steps on RAW or previously partitioned disks; do not add a separate Clear-Disk/diskpart wipe. The agreed demo is Windows 11 25H2 x64 Danish, online Graph registration with the Group Tag entered by the technician at Windows OOBE, verification, exact allowlisted app removal, then restart to OOBE. Do not add JSON registration, autologon, tenant secrets, unrelated helpers, frameworks or generated configuration layers.
 

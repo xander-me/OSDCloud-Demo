@@ -1,6 +1,11 @@
 # Host-side mock checks. No installation, network, real Appx or tenant calls.
 $ErrorActionPreference='Stop'
 Import-Module "$PSScriptRoot/../OSDCloudModules/Module.psm1" -Force
+# Load only the inline definition, never the real startup invocation.
+$tokens=$null; $parseErrors=$null
+$ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot '../OSDCloud_Start.ps1'),[ref]$tokens,[ref]$parseErrors)
+$definition=$ast.Find({param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'OSDCloudLogic'},$false)
+. ([scriptblock]::Create($definition.Extent.Text))
 $passed=0
 function Check($Name,[scriptblock]$Action) { & $Action; $script:passed++; Write-Host "PASS $Name" }
 function MustThrow([scriptblock]$Action) {
@@ -8,16 +13,9 @@ function MustThrow([scriptblock]$Action) {
     try { & $Action | Out-Null } catch { $failed=$true }
     if (-not $failed) { throw 'Expected a failure.' }
 }
-Check 'Windows settings do not contain a fixed Group Tag' {
+Check 'OOBE settings keep the supplied app list and no fixed Group Tag' {
     $s=Get-DemoSettings
-    if ($s.Windows.OSName -ne 'Windows 11 25H2 x64' -or $s.Windows.OSLanguage -ne 'da-dk' -or $s.PSObject.Properties.Name -contains 'GroupTag') { throw 'Unexpected demo settings.' }
-}
-Check 'OSDCloudLogic and the legacy startup alias resolve to the same function' {
-    $null=Get-Command OSDCloudLogic -Module Module -ErrorAction Stop
-    $alias=Get-Alias Start-DemoInstallation -ErrorAction Stop
-    if ($alias.Definition -ne 'OSDCloudLogic') { throw 'Legacy startup compatibility is missing.' }
-    $names=(Get-DemoSettings).RemoveApps
-    if ($names.Count -ne 25 -or 'Microsoft.WindowsCamera' -notin $names -or 'Microsoft.XboxApp' -notin $names) { throw 'Supplied app list was not retained.' }
+    if ($s.PSObject.Properties.Name -contains 'GroupTag' -or $s.RemoveApps.Count -ne 25 -or 'Microsoft.WindowsCamera' -notin $s.RemoveApps) { throw 'Unexpected OOBE settings.' }
 }
 $global:DemoTestGroupTag=''
 function global:Read-Host { param($Prompt); $global:DemoTestGroupTag }
@@ -80,7 +78,7 @@ Check 'Both platforms reject missing, multiple or differently numbered target di
             )) {
                 $global:DemoTestDisks=$case.Disks
                 $failure=''
-                try { OSDCloudLogic -BundlePath $PSScriptRoot } catch { $failure=$_.Exception.Message }
+                try { OSDCloudLogic } catch { $failure=$_.Exception.Message }
                 if ($failure -ne 'Exactly one local virtual disk numbered 0 is required.') { throw "Disk guard did not stop at the expected boundary: $failure" }
             }
         }
@@ -147,6 +145,11 @@ Check 'RAW, GPT and MBR targets reach the mocked engine with OSDCloud native wip
         $global:DemoTestWindowsArguments=@{} + $PSBoundParameters
         throw 'TEST: stop before any deployment operation'
     }
+    function global:Invoke-RestMethod { param($Uri,$Headers,$TimeoutSec,$ErrorAction); [pscustomobject]@{sha=('a'*40)} }
+    function global:Invoke-WebRequest { param([switch]$UseBasicParsing,$Uri,$OutFile,$TimeoutSec,$ErrorAction) }
+    function global:New-Item { param($Path,$ItemType,[switch]$Force) }
+    function global:Set-Content { param($Path,$Value,$Encoding) }
+    $previousTemp=$env:TEMP; $env:TEMP=[IO.Path]::GetTempPath()
     $previousDrive=$env:SystemDrive
     $previousOverrides=Get-Variable MyOSDCloud -Scope Global -ErrorAction SilentlyContinue
     try {
@@ -154,7 +157,7 @@ Check 'RAW, GPT and MBR targets reach the mocked engine with OSDCloud native wip
         foreach ($style in 'RAW','GPT','MBR') {
             $global:DemoTestPartitionStyle=$style
             $failure=''
-            try { OSDCloudLogic -BundlePath $PSScriptRoot } catch { $failure=$_.Exception.Message }
+            try { OSDCloudLogic } catch { $failure=$_.Exception.Message }
             if ($failure -ne 'TEST: stop before any deployment operation') { throw "Mock engine not reached: $failure" }
             $args=$global:DemoTestWindowsArguments
             if ($args.OSName -ne 'Windows 11 25H2 x64' -or $args.OSLanguage -ne 'da-dk' -or $args.OSEdition -ne 'Pro' -or $args.OSActivation -ne 'Retail' -or -not $args.ZTI -or -not $args.SkipAutopilot -or $args.Restart -or $args.Shutdown) { throw 'Incorrect Windows engine parameters.' }
@@ -164,14 +167,14 @@ Check 'RAW, GPT and MBR targets reach the mocked engine with OSDCloud native wip
             }
         }
     } finally {
-        $env:SystemDrive=$previousDrive
+        $env:SystemDrive=$previousDrive; $env:TEMP=$previousTemp
         if ($previousOverrides) { $global:MyOSDCloud=$previousOverrides.Value } else { Remove-Variable MyOSDCloud -Scope Global -ErrorAction SilentlyContinue }
-        Remove-Item Function:global:Test-Path,Function:global:Get-Disk,Function:global:Get-Module,Function:global:Import-Module,Function:global:Start-OSDCloud
+        Remove-Item Function:global:Test-Path,Function:global:Get-Disk,Function:global:Get-Module,Function:global:Import-Module,Function:global:Start-OSDCloud,Function:global:Invoke-RestMethod,Function:global:Invoke-WebRequest,Function:global:New-Item,Function:global:Set-Content
     }
 }
 Check 'Installation refuses a normal OS session before loading OSD' {
     $previous=$env:SystemDrive
-    try { $env:SystemDrive='C:'; MustThrow { OSDCloudLogic -BundlePath $PSScriptRoot } }
+    try { $env:SystemDrive='C:'; MustThrow { OSDCloudLogic } }
     finally { $env:SystemDrive=$previous }
 }
 Get-ChildItem (Join-Path $PSScriptRoot '..') -Recurse -Include *.ps1,*.psm1 | ForEach-Object {

@@ -1,12 +1,6 @@
 # Edit the demo settings here.
 function Get-DemoSettings {
     [pscustomobject]@{
-        Windows = @{
-            OSName       = 'Windows 11 25H2 x64'
-            OSEdition    = 'Pro'
-            OSLanguage   = 'da-dk'                 # Dansk (Danmark)
-            OSActivation = 'Retail'
-        }
         # Exact app names from the supplied demo list; missing apps are ignored.
         RemoveApps = @(
             'Microsoft.549981C3F5F10'
@@ -35,7 +29,6 @@ function Get-DemoSettings {
             'Microsoft.ZuneMusic'
             'Microsoft.ZuneVideo'
         )
-        OSDVersion = '26.10.16.1'
         AutopilotScriptVersion = '3.9'
     }
 }
@@ -61,62 +54,6 @@ function Assert-DemoVM {
 
 # PreOS -> Windows -> stage OOBE -> reboot.
 # No ComputerPrefix: the Group Tag is entered later in Windows OOBE.
-function OSDCloudLogic {
-    [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$BundlePath)
-    $ErrorActionPreference = 'Stop'
-    if ($env:SystemDrive -ne 'X:' -or -not (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT')) { throw 'Start installation from WinPE.' }
-    Assert-DemoVM
-    $disks = @(Get-Disk | Where-Object { $_.BusType -ne 'USB' })
-    if ($disks.Count -ne 1 -or $disks[0].Number -ne 0) { throw 'Exactly one local virtual disk numbered 0 is required.' }
-    foreach ($file in 'OOBE.ps1','OSDCloudModules/Module.psm1','revision.txt') {
-        if (-not (Test-Path (Join-Path $BundlePath $file) -PathType Leaf)) { throw "Missing demo file: $file" }
-    }
-    $settings = Get-DemoSettings
-    $settings.Windows | Format-Table -AutoSize | Out-Host
-    Write-Host 'Autopilot Group Tag will be entered at Windows OOBE.'
-    Write-Host 'OSDCloud will wipe and repartition the sole local virtual disk 0. Existing data will be erased.'
-    if (-not (Get-Module OSD -ListAvailable | Where-Object { $_.Version -eq [version]$settings.OSDVersion })) {
-        Install-Module OSD -RequiredVersion $settings.OSDVersion -Scope AllUsers -Force -ErrorAction Stop
-    }
-    Import-Module OSD -RequiredVersion $settings.OSDVersion -Force -ErrorAction Stop
-    # This demo accepts VMs only. No OEM driver-pack download or firmware update.
-    $global:MyOSDCloud = @{
-        # Use OSDCloud's own wipe and partitioning steps, including on an existing Windows disk.
-        SkipAllDiskSteps = $false
-        SkipClearDisk = $false
-        SkipNewOSDisk = $false
-        DriverPackName = 'none'
-        SkipRecoveryPartition = $true
-        SetupCompleteNoRestart = $true
-        ShutdownSetupComplete = $false
-        WindowsUpdate = $false
-        WindowsUpdateDrivers = $false
-        WindowsDefenderUpdate = $false
-    }
-    $windows = $settings.Windows
-    Start-OSDCloud @windows -SkipAutopilot -ZTI -Restart:$false -Shutdown:$false
-    if (-not $global:OSDCloud.TimeEnd -or -not (Test-Path 'C:\Windows\System32\Config\SYSTEM')) { throw 'OSDCloud did not report a completed Windows deployment.' }
-    $destination = 'C:\ProgramData\OSDCloud-Demo'
-    New-Item "$destination\OSDCloudModules" -ItemType Directory -Force | Out-Null
-    foreach ($file in 'OOBE.ps1','OSDCloudModules/Module.psm1','revision.txt') {
-        $source = Join-Path $BundlePath $file
-        $target = Join-Path $destination $file
-        Copy-Item -LiteralPath $source -Destination $target -Force -ErrorAction Stop
-        if ((Get-FileHash $source -Algorithm SHA256).Hash -ne (Get-FileHash $target -Algorithm SHA256).Hash) { throw "Staging verification failed: $file" }
-    }
-    @'
-@echo off
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\OSDCloud-Demo\OOBE.ps1
-if errorlevel 1 (
-    echo DEMO STOPPED. Review C:\ProgramData\OSDCloud-Demo\OOBE.log
-    exit /b 1
-)
-'@ | Set-Content 'C:\Windows\System32\OOBE.cmd' -Encoding ASCII
-    Write-Host 'Windows installed. At OOBE press Shift+F10 and run OOBE to register this demo VM.'
-    & wpeutil.exe reboot
-    if ($LASTEXITCODE -ne 0) { throw 'WinPE reboot failed.' }
-}
 
 function Read-DemoGroupTag {
     $groupTag = ([string](Read-Host 'Enter the Autopilot Group Tag')).Trim()
@@ -162,6 +99,5 @@ function Remove-DemoApps {
     Write-Host 'App cleanup verified. Apps absent from the allowlist were not selected for removal.'
 }
 
-# Compatibility for a startup script downloaded before this function was renamed.
-Set-Alias -Name Start-DemoInstallation -Value OSDCloudLogic
-Export-ModuleMember -Function Get-DemoSettings,Assert-DemoVM,OSDCloudLogic,Read-DemoGroupTag,Confirm-DemoRegistration,Remove-DemoApps -Alias Start-DemoInstallation
+# OOBE helpers only. Installation lives in OSDCloud_Start.ps1.
+Export-ModuleMember -Function Get-DemoSettings,Assert-DemoVM,Read-DemoGroupTag,Confirm-DemoRegistration,Remove-DemoApps

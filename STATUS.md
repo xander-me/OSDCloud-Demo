@@ -1,6 +1,6 @@
 # Status
 
-Aktuelt: automatisk StartURL uden DEMO-prompt; Windows 11 25H2 x64 / da-dk / Pro. Group Tag vælges ved OOBE. VM-/én-måldisk-guard og fejlpauser bevares. OSDClouds egen wipe/partitionering bruges også på tidligere installeret disk; blank disk kræves ikke længere. Tidligere notater nedenfor beskriver udviklingen.
+Aktuelt: inline OSDCloudLogic i OSDCloud_Start.ps1, kald nederst og Windows-settings i samme fils [OS]-afsnit; automatisk StartURL uden DEMO-prompt; Windows 11 25H2 x64 / da-dk / Pro. Group Tag vælges ved OOBE. VM-/én-måldisk-guard og fejlpauser bevares. OSDClouds egen wipe/partitionering bruges også på tidligere installeret disk; blank disk kræves ikke længere. Tidligere notater nedenfor beskriver udviklingen.
 
 2026-11-08 — foundation/prototype.
 
@@ -40,3 +40,6 @@ Rettelse efter brugerens GitHub-commit bda89b7: OSDCloud_Start.ps1 var erstattet
 
 
 Seneste mandat: Alexander bad om at slette disken som normal OSDCloud og understregede, at OSDClouds egen wipe-feature skal bruges. RAW-kravet er fjernet; én lokal disk 0 på genkendt VM kræves stadig. MyOSDCloud sætter SkipAllDiskSteps/SkipClearDisk/SkipNewOSDisk=false, og den eksisterende Start-OSDCloud -ZTI udfører sin normale Clear-LocalDisk/partitionering. Ingen separat wipekommando eller diskkørsel tilføjet/udført her. Den fastlagte OSD-kilde er inspiceret: dens normale WinPE-disksektion rydder disken før nye partitioner, med bekræftelse fravalgt via ZTI på én disk. RAW/GPT/MBR testes frem til mocked engine med native-diskflag; manglende/flere/forkert nummererede diske afvises på begge platforme. Virkelig wipe/Windows/VM/tenant-runtime afventer fortsat brugerens test.
+
+
+Seneste brugerpræference: behold single-file-funktionen i OSDCloud_Start.ps1 og ret startupfejlen dér. Efter afklaring bevares den tidligere aftalte Graph/OOBE-flow, ikke den gamle JSON/GroupX/forfatter-hostede kæde. OSDCloudLogic og Windows-settings er nu flyttet tilbage i startupfilen med et eksplicit kald nederst og fejlpauser/log. Ingen import af installationsfunktionen fra modulet. Modulet er kun OOBE-hjælpere/appliste; Group Tag indtastes ved OOBE. Dansk 25H2, Hyper-V/Proxmox, én lokal disk 0 og native OSDCloud wipe bevares. De seks startupcases udfører den konkrete inline-kode via Invoke-Expression med mocked engine/network; 12 supporting testgrupper og syntakschecks består. Ingen reel Windows/disk/tenantoperation udført. Den først foreslåede uændrede genaktivering af den gamle helper-kæde blev afvist af automatisk approval review; denne implementering udelader den kæde og følger brugerens afklaring. Næste handling: test samme StartURL på brugerens VM.

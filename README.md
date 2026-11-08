@@ -6,7 +6,7 @@ En enkel GT Tech Day-demo: **Windows → Autopilot → appfjernelse → OOBE**.
 
 ## Indstillinger
 
-Åbn **[OSDCloudModules/Module.psm1](OSDCloudModules/Module.psm1)**. Indstillingerne står øverst:
+Åbn **[OSDCloud_Start.ps1](OSDCloud_Start.ps1)**. Windows-indstillingerne står i `[OS]`-afsnittet inde i `OSDCloudLogic`:
 
 ```powershell
 OSName       = 'Windows 11 25H2 x64'
@@ -16,7 +16,7 @@ OSActivation = 'Retail'
 
 ```
 
-Samme sted ligger applisten fra den aftalte funktion, herunder Solitaire, Weather, Xbox, Camera og OneNote. Kun eksisterende apps på listen fjernes; nogle ældre apps findes ikke på Windows 11 25H2. Der matches eksakte pakkenavne.
+I **[OSDCloudModules/Module.psm1](OSDCloudModules/Module.psm1)** ligger applisten fra den aftalte funktion, herunder Solitaire, Weather, Xbox, Camera og OneNote. Kun eksisterende apps på listen fjernes; nogle ældre apps findes ikke på Windows 11 25H2. Der matches eksakte pakkenavne.
 
 ## Start fra én URL
 
@@ -29,7 +29,7 @@ Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile X:\OSDCloud_Start.ps1 -Err
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File X:\OSDCloud_Start.ps1
 ```
 
-Startup starter automatisk uden profilvalg og viser source-commit og settings, installerer Windows og gemmer OOBE-trinnet lokalt fra samme source-commit. Hentning af filer fejler uden fallback. Til den endelige generalprøve bruges samme faste commit i både download-URL og scriptets `-Revision`-parameter. Branch-URL'en bruges til centrale ændringer; kun betroede writers bør kunne ændre den.
+Startup starter automatisk uden profilvalg og viser source-commit og settings, installerer Windows og gemmer OOBE-trinnet lokalt fra samme source-commit. Hentning af filer fejler uden fallback. Til generalprøven registreres både startupfilens commit og den viste OOBE-helper-commit; disse kan være forskellige, hvis main ændres mellem hentninger. Branch-URL'en bruges til centrale ændringer; kun betroede writers bør kunne ændre den.
 
 ## Ved Windows OOBE
 
@@ -47,8 +47,8 @@ Tryk **Shift+F10**, skriv **`OOBE`**, og log ind med en administrator fra den ri
 
 | Fil | Formål |
 | --- | --- |
-| [OSDCloud_Start.ps1](OSDCloud_Start.ps1) | URL-entrypoint; automatisk start |
-| [OSDCloudModules/Module.psm1](OSDCloudModules/Module.psm1) | Windows-settings, tag, appliste og hjælpefunktioner |
+| [OSDCloud_Start.ps1](OSDCloud_Start.ps1) | Installationsfunktion, Windows-indstillinger og automatisk kald |
+| [OSDCloudModules/Module.psm1](OSDCloudModules/Module.psm1) | OOBE-hjælpere og appliste; Group Tag indtastes ved OOBE |
 | [OOBE.ps1](OOBE.ps1) | Graph-registrering, verificering, cleanup og genstart |
 | [STATUS.md](STATUS.md) | Afprøvning og næste handling |
 
@@ -90,7 +90,7 @@ Den danske installationsvariant, applisten på det konkrete image og den fulde H
 StartURL starter nu forløbet uden at spørge efter DEMO. Kontrollen for WinPE, Hyper-V/Proxmox og præcis én lokal måldisk nummer 0 er uændret. Fejl holder stadig vinduet åbent; Group Tag indtastes fortsat først ved Windows OOBE. Med main-StartURL kræves ingen ny ISO for denne ændring.
 
 
-`OSDCloud_Start.ps1` er launcher-filen: den henter/importerer modulet og **kalder** `OSDCloudLogic`. Selve funktionen og Windows-indstillingerne ligger i `OSDCloudModules/Module.psm1`. Hvis launcher-filen erstattes af kun `function OSDCloudLogic { ... }`, bliver funktionen defineret uden at køre, og StartURL-vinduet lukker. Brug modulet til ændringer af Windows-indstillinger; Windows 11 25H2 / da-dk er allerede sat dér.
+`OSDCloud_Start.ps1` indeholder igen selve `function OSDCloudLogic { ... }` og et eksplicit **kald nederst i samme fil**. Windows-indstillingerne redigeres i funktionens `[OS]`-afsnit. Funktionen alene er en definition; kaldet nederst er nødvendigt for at starte. OOBE-helperne hentes og stages lokalt før reboot, men installationsfunktionen importeres ikke fra modulet.
 
 
 ## Sletning af den eksisterende disk

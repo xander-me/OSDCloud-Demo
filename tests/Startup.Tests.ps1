@@ -1,44 +1,60 @@
-# Reproduce OSDCloud StartURL's Invoke-Expression launch; no network/disk/deployment calls.
+# Exercise the single-file StartURL through Invoke-Expression. All effects are mocked.
 $ErrorActionPreference='Stop'
 $source=Get-Content "$PSScriptRoot/../OSDCloud_Start.ps1" -Raw
 function Run-StartupCase([string]$Mode) {
-    $global:StartupCase=$Mode
-    $global:StartupPromptsAtInstall=-1; $global:StartupPrompts=@(); $global:StartupInstallCalls=0; $global:StartupRequests=0; $global:StartupStoppedTranscript=$false
+    $global:StartupMode=$Mode; $global:StartupPrompts=@(); $global:StartupEngineCalls=0; $global:StartupRequests=0
+    $global:StartupStoppedTranscript=$false; $global:StartupCaught=''; $global:StartupEngineArgs=$null
     function Read-Host { param($Prompt); $global:StartupPrompts += $Prompt; return '' }
     function Start-Transcript { param($Path,[switch]$Append,$ErrorAction) }
     function Stop-Transcript { $global:StartupStoppedTranscript=$true }
+    function Test-Path { param($Path); return $true }
+    function Get-CimInstance {
+        param($ClassName,$ErrorAction)
+        if ($global:StartupMode -eq 'Physical') { return [pscustomobject]@{Manufacturer='Dell Inc.';Model='Physical PC'} }
+        [pscustomobject]@{Manufacturer='QEMU';Model='Standard PC (Q35 + ICH9, 2009)'}
+    }
+    function Get-Disk {
+        if ($global:StartupMode -eq 'MultipleDisks') { [pscustomobject]@{Number=1;BusType='SCSI';PartitionStyle='GPT'} }
+        [pscustomobject]@{Number=0;BusType='SCSI';PartitionStyle='GPT'}
+    }
     function Invoke-RestMethod {
         param($Uri,$Headers,$TimeoutSec,$ErrorAction)
         $global:StartupRequests++
-        if ($global:StartupCase -eq 'GitHubFailure') { throw 'TEST: GitHub connection failed' }
+        if ($global:StartupMode -eq 'GitHubFailure') { throw 'TEST: GitHub connection failed' }
         [pscustomobject]@{sha=('a'*40)}
     }
     function Invoke-WebRequest { param([switch]$UseBasicParsing,$Uri,$OutFile,$TimeoutSec,$ErrorAction) }
     function New-Item { param($Path,$ItemType,[switch]$Force) }
     function Set-Content { param($Path,$Value,$Encoding) }
+    function Get-Module { param($Name,[switch]$ListAvailable); [pscustomobject]@{Version=[version]'26.10.16.1'} }
     function Import-Module {
-        param($Name,[switch]$Force,$ErrorAction)
-        if ($global:StartupCase -eq 'ModuleFailure') { throw 'TEST: module failed to load' }
+        param($Name,$RequiredVersion,[switch]$Force,$ErrorAction)
+        if ($global:StartupMode -eq 'ModuleFailure') { throw 'TEST: module failed to load' }
     }
-    function OSDCloudLogic { param($BundlePath); $global:StartupPromptsAtInstall=$global:StartupPrompts.Count; $global:StartupInstallCalls++ }
-    $beforeDrive=$env:SystemDrive; $beforeTemp=$env:TEMP; $beforeTLS=[Net.ServicePointManager]::SecurityProtocol
-    $global:StartupCaught=''
+    function Start-OSDCloud {
+        param($OSName,$OSEdition,$OSLanguage,$OSActivation,[switch]$SkipAutopilot,[switch]$ZTI,[switch]$Restart,[switch]$Shutdown)
+        if ($global:StartupPrompts.Count) { throw 'Unexpected prompt before installation.' }
+        $global:StartupEngineCalls++
+        $global:StartupEngineArgs=@{}+$PSBoundParameters
+        throw 'TEST: stopped at mocked OSD engine; no disk operation performed'
+    }
+    $drive=$env:SystemDrive; $temp=$env:TEMP; $tls=[Net.ServicePointManager]::SecurityProtocol
+    $overrides=Get-Variable MyOSDCloud -Scope Global -ErrorAction SilentlyContinue
     try {
-        $env:SystemDrive=if ($Mode -eq 'NotWinPE') { 'C:' } else { 'X:' }; $env:TEMP=[IO.Path]::GetTempPath()
-        # This is the execution mechanism used by Invoke-WebPSScript, rather than -File.
+        $env:SystemDrive=if ($Mode -eq 'NotWinPE') {'C:'} else {'X:'}; $env:TEMP=[IO.Path]::GetTempPath()
         Invoke-Expression $source
     } catch { $global:StartupCaught=$_.Exception.Message }
-    finally { $env:SystemDrive=$beforeDrive; $env:TEMP=$beforeTemp; [Net.ServicePointManager]::SecurityProtocol=$beforeTLS }
+    finally {
+        $env:SystemDrive=$drive; $env:TEMP=$temp; [Net.ServicePointManager]::SecurityProtocol=$tls
+        if ($overrides) { $global:MyOSDCloud=$overrides.Value } else { Remove-Variable MyOSDCloud -Scope Global -ErrorAction SilentlyContinue }
+    }
 }
-foreach ($mode in 'GitHubFailure','ModuleFailure') {
+foreach ($mode in 'GitHubFailure','ModuleFailure','NotWinPE','Physical','MultipleDisks') {
     Run-StartupCase $mode
-    if ($global:StartupInstallCalls -ne 0 -or $global:StartupPrompts.Count -ne 1 -or $global:StartupCaught -notlike 'TEST:*' -or -not $global:StartupStoppedTranscript) { throw "Failure did not pause and terminate safely: $mode" }
-    Write-Host "PASS $mode pauses for the error and never calls installation"
+    if ($global:StartupEngineCalls -ne 0 -or $global:StartupPrompts.Count -ne 1 -or -not $global:StartupCaught -or -not $global:StartupStoppedTranscript) { throw "Failure did not stop visibly before the engine: $mode" }
+    Write-Host "PASS $mode stops before installation and pauses on error"
 }
-Run-StartupCase 'Success'
-if ($global:StartupInstallCalls -ne 1 -or $global:StartupRequests -ne 1 -or $global:StartupPromptsAtInstall -ne 0 -or $global:StartupCaught) { throw 'Automatic startup asked for input or failed before the mocked installer.' }
-Write-Host 'PASS automatic startup reaches the mocked installer with no input prompt'
-Run-StartupCase 'NotWinPE'
-if ($global:StartupInstallCalls -ne 0 -or $global:StartupRequests -ne 0 -or $global:StartupCaught -ne 'Run this startup script from WinPE.' -or $global:StartupPrompts.Count -ne 1) { throw 'Non-WinPE startup did not stop before network/installation.' }
-Write-Host 'PASS non-WinPE startup stops before contacting GitHub or starting installation'
-Write-Host '4 startup mock cases passed. WinPE itself remains untested here.'
+Run-StartupCase 'EngineReached'
+if ($global:StartupEngineCalls -ne 1 -or $global:StartupEngineArgs.OSName -ne 'Windows 11 25H2 x64' -or $global:StartupEngineArgs.OSLanguage -ne 'da-dk' -or $global:StartupCaught -notlike 'TEST: stopped at mocked OSD engine*') { throw 'Inline function was not called with the Danish settings.' }
+Write-Host 'PASS single-file definition is invoked automatically with Windows 11 25H2 / da-dk'
+Write-Host '6 startup mock cases passed; no disk, download, app removal or tenant operation executed.'
