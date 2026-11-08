@@ -1,5 +1,7 @@
 # Status
 
+Aktuelt: automatisk StartURL uden DEMO-prompt; Windows 11 25H2 x64 / da-dk / Pro. Group Tag vælges ved OOBE. VM-/tom-disk-guard og fejlpauser bevares. Tidligere notater nedenfor beskriver udviklingen.
+
 2026-11-08 — foundation/prototype.
 
 Mandat: Alexander har efter oprydning godkendt et nyt, enkelt GitHub-grundlag: én URL, profilen DEMO, Windows 11 25H2 x64 en-us, online Graph-registrering med Group Tag AutopilotOOBE, verificering, eksakt appallowlist og genstart til OOBE. Ingen JSON-registrering eller genbrug af den kasserede GT Tech Day-implementation.
@@ -29,3 +31,6 @@ Seneste ændring: Alexander ønsker Group Tag tilføjet senere ved OOBE. Fast Gr
 Seneste mandat: brugeren har indsat OSDCloudLogic som nyt udgangspunkt og bedt om at fjerne forfatterrelaterede tilpasninger og tilføje Windows 11 25H2 DK. Installationsfunktionen hedder nu OSDCloudLogic og bruger Start-OSDCloud med OSName Windows 11 25H2 x64 / Pro / da-dk / Retail. Tidligere Start-DemoInstallation-navn er en kompatibilitetsalias til ældre downloadede startupfiler. Den indsendte 25-app-liste er bevaret som eksakt, case-insensitiv allowlist. ComputerPrefix/navne/GroupX, Autopilot-JSON, eksterne personlige helper-URL'er, OEM-key-/TPM-/cleanup-kæde og tom SetupComplete er ikke genindført. Group Tag ved OOBE og direkte Graph-registrering fra forrige beslutning bevares. Ingen firmware/OEM-pack for VM'er; automatiske fulde Windows-/driveropdateringer er fravalgt i 20-minutters demoen og dokumenteret. Faktisk dansk installation og app-listens resultat afventer brugerens test. Ingen VM eller tenant ændret her.
 
 Validering af DK-ændringen: 13 foundation-mocktestgrupper og 4 startupcases bestået; alle PowerShell-filer syntaxkontrolleret og diffcheck bestået. Ny test kører OSDCloudLogic frem til et mocked Start-OSDCloud og kontrollerer da-dk/25H2/x64/Pro/Retail samt ingen firmware, automatisk reboot eller diskoperation i testen. Virkelig DK/Windows/VM/tenant-test er fortsat åben.
+
+
+Seneste mandat: brugeren har bedt om at fjerne den overflødige DEMO-bekræftelse. Den er fjernet; der er ingen inputpause før OSDCloudLogic. Fire startupcases dækker automatisk fremdrift uden Read-Host før mocked installation, GitHub-fejl, modulfejl og stop uden for WinPE. Foundation-testene dækker fortsat VM-/diskgrænser og OOBE-tag. Fejl- og uventet-retur-pauser er bevaret, så lukkede PowerShell-vinduer ikke skjuler fejl. Ingen Windows-/disk-/tenantoperation kørt her; faktisk VM-test mangler stadig.

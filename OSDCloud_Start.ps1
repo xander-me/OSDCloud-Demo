@@ -1,4 +1,4 @@
-# One URL starts the demo from WinPE. No deployment runs until DEMO is selected.
+# One URL starts the demo automatically from WinPE; VM and blank-disk checks remain.
 [CmdletBinding()]
 param([string]$Revision = 'main')
 $ErrorActionPreference = 'Stop'
@@ -10,8 +10,7 @@ try {
         $transcribing = $true
     } catch { Write-Warning "Cannot start transcript: $($_.Exception.Message)" }
     if ($env:SystemDrive -ne 'X:') { throw 'Run this startup script from WinPE.' }
-    $choice = Read-Host 'Type DEMO to install Windows 11 25H2 x64 / Dansk / Pro'
-    if ($choice.Trim() -ine 'DEMO') { Write-Host 'Cancelled. No deployment started.'; return }
+    Write-Host 'Starting Windows 11 25H2 x64 / Dansk / Pro automatically.'
 
     # Windows PowerShell/WinPE may otherwise negotiate an older TLS version.
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
