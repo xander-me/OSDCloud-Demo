@@ -12,6 +12,64 @@ Check 'Readable settings select the agreed Windows and Group Tag' {
     $s=Get-DemoSettings
     if ($s.Windows.OSName -ne 'Windows 11 25H2 x64' -or $s.Windows.OSLanguage -ne 'en-us' -or $s.GroupTag -ne 'AutopilotOOBE') { throw 'Unexpected demo settings.' }
 }
+$global:DemoTestMachine=$null
+function global:Get-CimInstance { param($ClassName,$ErrorAction); $global:DemoTestMachine }
+Check 'Hyper-V is accepted' {
+    $global:DemoTestMachine=[pscustomobject]@{Manufacturer='Microsoft Corporation';Model='Virtual Machine'}
+    Assert-DemoVM
+}
+Check 'Proxmox Q35, i440FX and KVM identities are accepted' {
+    foreach ($pair in @(
+        @('QEMU','Standard PC (Q35 + ICH9, 2009)'),
+        @('QEMU','Standard PC (i440FX + PIIX, 1996)'),
+        @('QEMU','KVM'),
+        @('Red Hat','KVM'),
+        @('KVM','KVM')
+    )) {
+        $global:DemoTestMachine=[pscustomobject]@{Manufacturer=$pair[0];Model=$pair[1]}
+        Assert-DemoVM
+    }
+}
+Check 'Physical, unknown and partial VM identities remain rejected' {
+    foreach ($pair in @(
+        @('Dell Inc.','OptiPlex'),
+        @('Microsoft Corporation','Surface Pro'),
+        @('QEMU','Unrecognized model'),
+        @('Other','KVM'),
+        @('','')
+    )) {
+        $global:DemoTestMachine=[pscustomobject]@{Manufacturer=$pair[0];Model=$pair[1]}
+        MustThrow { Assert-DemoVM }
+    }
+}
+Check 'Both platforms still reject missing, nonblank or multiple disks before module loading' {
+    function global:Test-Path { param($Path); if ($Path -eq 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT') { return $true }; throw 'Unexpected filesystem access after disk guard.' }
+    function global:Get-Disk { $global:DemoTestDisks }
+    $previous=$env:SystemDrive
+    try {
+        $env:SystemDrive='X:'
+        foreach ($machine in @(
+            [pscustomobject]@{Manufacturer='Microsoft Corporation';Model='Virtual Machine'},
+            [pscustomobject]@{Manufacturer='QEMU';Model='Standard PC (Q35 + ICH9, 2009)'}
+        )) {
+            $global:DemoTestMachine=$machine
+            foreach ($case in @(
+                @{Disks=@()},
+                @{Disks=@([pscustomobject]@{Number=0;PartitionStyle='GPT';BusType='SCSI'})},
+                @{Disks=@([pscustomobject]@{Number=1;PartitionStyle='RAW';BusType='SCSI'})},
+                @{Disks=@([pscustomobject]@{Number=0;PartitionStyle='RAW';BusType='SCSI'},[pscustomobject]@{Number=1;PartitionStyle='RAW';BusType='SCSI'})}
+            )) {
+                $global:DemoTestDisks=$case.Disks
+                $failure=''
+                try { Start-DemoInstallation -BundlePath $PSScriptRoot } catch { $failure=$_.Exception.Message }
+                if ($failure -ne 'Exactly one blank virtual disk numbered 0 is required.') { throw "Disk guard did not stop at the expected boundary: $failure" }
+            }
+        }
+    } finally {
+        $env:SystemDrive=$previous
+        Remove-Item Function:global:Test-Path,Function:global:Get-Disk
+    }
+}
 $global:DemoTestDevices=@()
 function global:Get-AutopilotDevice { param($serial,$ErrorAction); $global:DemoTestDevices }
 Check 'Registration is accepted only for matching serial and Group Tag' {
@@ -69,4 +127,4 @@ Get-ChildItem (Join-Path $PSScriptRoot '..') -Recurse -Include *.ps1,*.psm1 | Fo
     $null=[System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$errors)
     if ($errors) { throw ($errors | Out-String) }
 }
-Write-Host "$passed host-side test groups and all script syntax checks passed. Windows/Hyper-V/Graph remain untested."
+Write-Host "$passed host-side test groups and all script syntax checks passed. Windows/Hyper-V/Proxmox/Graph runtime remains untested."

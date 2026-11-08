@@ -2,7 +2,7 @@
 
 En enkel GT Tech Day-demo: **Windows → Autopilot → appfjernelse → OOBE**.
 
-**Foundation/prototype. Scripts er ikke afprøvet i Windows/Hyper-V endnu.**
+**Foundation/prototype. Scripts er ikke afprøvet i Windows/Hyper-V/Proxmox endnu.**
 
 ## Indstillinger
 
@@ -21,7 +21,7 @@ Samme sted ligger den korte liste over apps, der fjernes, hvis de er installeret
 
 ## Start fra én URL
 
-I en forberedt amd64 OSDCloud WinPE på en **dedikeret Hyper-V-VM med én tom virtuel disk**:
+I en forberedt amd64 OSDCloud WinPE på en **dedikeret Hyper-V- eller Proxmox-VM med én tom virtuel disk**:
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -66,3 +66,10 @@ Kilder: [Microsofts online-registrering](https://learn.microsoft.com/en-us/autop
 Startup viser nu fire trin og bliver stående ved fejl, indtil du trykker Enter. Kopiér fejlteksten før vinduet lukkes. Log: `%TEMP%\OSDCloud-Demo-Startup.log` (normalt `X:\Windows\Temp\OSDCloud-Demo-Startup.log` i WinPE). `DEMO` accepteres også med små bogstaver og omgivende mellemrum. TLS 1.2 aktiveres før GitHub-kald.
 
 Ved OSDCloud V1 `StartURL`, der peger på `main`-URL'en, hentes opdateret startupkode ved næste boot; ISO'en skal ikke genbygges for denne scriptrettelse. Genstart kun det dedikerede test-VM-forløb. Den oprindelige fejlårsag skal stadig identificeres ud fra den synlige fejl/log; diagnosticering alene beviser ikke, at deployment virker i WinPE.
+
+
+## Hyper-V og Proxmox
+
+Begge platforme accepteres nu i VM-kontrollen, både ved WinPE-installation og i OOBE-trinnet. Proxmox genkendes via de normale QEMU/Q35-, QEMU/i440FX- eller KVM-identiteter. Kravet er fortsat præcis én lokal RAW-disk nummer 0. En ændret SMBIOS-identitet kan kræve gennemgang; fejlteksten viser de registrerede manufacturer/model-værdier.
+
+Ved Proxmox skal WinPE kunne se disk og netværk. VirtIO-controller/netkort kan kræve drivere i bootmediet; valg af VM-platform i scriptet installerer ikke WinPE-drivere. Hverken den samlede Hyper-V- eller Proxmox-installation er verificeret her. Hvis `StartURL` peger på `main`, hentes rettelsen ved næste boot uden ISO-genbygning.

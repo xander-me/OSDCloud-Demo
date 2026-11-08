@@ -21,9 +21,20 @@ function Get-DemoSettings {
 # Supporting functions. These do not run when the module is imported.
 function Assert-DemoVM {
     $machine = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
-    if ($machine.Manufacturer -ne 'Microsoft Corporation' -or $machine.Model -ne 'Virtual Machine') {
-        throw 'This demo is restricted to a dedicated Hyper-V VM.'
+    $manufacturer = ([string]$machine.Manufacturer).Trim()
+    $model = ([string]$machine.Model).Trim()
+    $hyperV = $manufacturer -ieq 'Microsoft Corporation' -and $model -ieq 'Virtual Machine'
+    # Proxmox uses QEMU/KVM. Match known manufacturer/model pairs, not any virtual-looking name.
+    $qemu = $manufacturer -ieq 'QEMU' -and $model -iin @(
+        'Standard PC (Q35 + ICH9, 2009)',
+        'Standard PC (i440FX + PIIX, 1996)',
+        'KVM'
+    )
+    $kvm = $manufacturer -iin @('Red Hat','KVM') -and $model -ieq 'KVM'
+    if (-not ($hyperV -or $qemu -or $kvm)) {
+        throw "A dedicated Hyper-V or Proxmox/QEMU/KVM VM is required. Detected manufacturer='$manufacturer', model='$model'. Custom SMBIOS identities require review."
     }
+    Write-Host "Demo VM recognized: $manufacturer / $model"
 }
 
 function Start-DemoInstallation {
