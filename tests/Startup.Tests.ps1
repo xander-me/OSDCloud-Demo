@@ -9,7 +9,8 @@ function Assert($condition,$message) { if (-not $condition) { throw $message } }
 function Test-Path { param($Path); if ($script:mode -eq 'NotWinPE' -and $Path -like 'HKLM:*') { return $false }; return $true }
 function Get-CimInstance { param($ClassName); if ($script:mode -eq 'Physical') { return [pscustomobject]@{Manufacturer='Dell';Model='PC'} }; if ($script:mode -eq 'HyperV') { return [pscustomobject]@{Manufacturer='Microsoft Corporation';Model='Virtual Machine'} }; [pscustomobject]@{Manufacturer='QEMU';Model='Standard PC (Q35 + ICH9, 2009)'} }
 function Get-Disk { if ($script:mode -eq 'MultipleDisks') { [pscustomobject]@{Number=1;BusType='SCSI'} }; [pscustomobject]@{Number=0;BusType='SCSI';PartitionStyle='GPT'} }
-function Install-Module { param($Name,$RequiredVersion,[switch]$Force,$ErrorAction); if ($script:mode -eq 'ModuleFailure') { throw 'Module failed' } }
+function Get-Module { param($Name,[switch]$ListAvailable); if ($script:mode -ne 'ModuleFailure') { [pscustomobject]@{Version=[version]'26.10.16.1'} } }
+function Install-Module { param($Name,$RequiredVersion,[switch]$Force,$ErrorAction); $script:installs++; if ($script:mode -eq 'ModuleFailure') { throw 'Module failed' } }
 function Import-Module { param($Name,$RequiredVersion,[switch]$Force,$ErrorAction) }
 function Start-OSDCloud {
     param($OSVersion,$OSBuild,$OSEdition,$OSLanguage,$OSActivation,$ZTI,$Firmware,$Restart,$Shutdown,$SkipAutopilot)
@@ -23,9 +24,10 @@ function Out-File { param([Parameter(ValueFromPipeline)] $InputObject,[Parameter
 function Start-Sleep { param($Seconds) }
 function wpeutil { param($command); $script:reboot++; $global:LASTEXITCODE=0 }
 foreach ($mode in 'NotWinPE','Physical','MultipleDisks','ModuleFailure','EngineFailure','Incomplete','HyperV','Proxmox') {
-    $script:mode=$mode; $script:calls=0; $script:reboot=0; $script:files=@{}; $caught=$false
+    $script:mode=$mode; $script:installs=0; $script:calls=0; $script:reboot=0; $script:files=@{}; $caught=$false
     try { OSDCloudLogic } catch { $caught=$true }
     if ($mode -in 'HyperV','Proxmox') {
+        Assert ($script:installs -eq 0) 'Installed OSD unnecessarily contacted Gallery'
         Assert (-not $caught -and $script:reboot -eq 1 -and $script:calls -eq 1) "$mode did not complete mocked staging"
         Assert ($script:settings.OSBuild -eq '25H2' -and $script:settings.OSLanguage -eq 'da-dk' -and $script:settings.OSActivation -eq 'Retail') 'Wrong Windows settings'
         Assert (-not $script:settings.Restart -and -not $script:settings.Shutdown -and $script:settings.SkipAutopilot) 'Unexpected engine handoff'
