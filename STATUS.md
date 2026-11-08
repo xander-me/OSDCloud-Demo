@@ -64,3 +64,12 @@ Brugerens output indeholder tidligere tekster, smart quotes i da-dk og tom Setup
 ## 2026-11-08 — Proxmox lokal image-server
 
 Tilføjet proxmox/install-image-server.sh og dansk vejledning efter brugerens ønske. Ny unprivileged Debian LXC med Nginx, dedikeret read-only hostmappe, DHCP eller statisk IPv4, eksisterende ID afvises og fejl sletter ikke containeren. Ingen værtsnetværksændring/pakkeinstallation. Bash syntax, ShellCheck og tre mockscenarier består; ingen rigtig Proxmox-installation er kørt. Windows/Autopilot-scriptet er uændret. Næste handling: bruger kører installer, tilføjer dansk 25H2 WIM/ESD og tester HTTP fra WinPE; derefter tilpasses Windows-startup med faktisk URL og Pro-index.
+
+
+## 2026-11-08 — Aktuel kilde ændret til LAN Evaluation ISO
+
+Brugeren ønsker sin Windows 11 25H2 Enterprise Evaluation x64 en-US ISO på PCS-SRV1 anvendt, uden username/password. Den angivne share-sti inklusive afsluttende U+2265 er bevaret og tydeligt konfigurerbar. Erstatter demoens tidligere Danish Pro/catalog-valg og planlagt Proxmox HTTP-kilde. Ingen credential-/SMB-policyændringer. OOBE-JSON er uændret.
+
+Startup 2026-11-08.3 kontrollerer UNC-filadgang, read-only ISO-mount og entydig EnterpriseEval/x64/en-US/build26200-metadata før Start-OSDCloud. Native custom-image-kilde og index anvendes, ikke legacy OSVersion/OSLanguage-parametre. Native wipe og den eksisterende handoff bevares. ISO-mount/discovery kan være utilgængelig i WinPE; så stoppes før wipe, og en udtrukket WIM/ESD skal bruges i et tilpasset flow. Ingen runtime-/hash-/licens- eller Autopilot-kompatibilitetsgaranti udledes af metadata.
+
+Validering: 12 startup-mockcases og 5 OOBE-mockcases samt syntakskontrol og diffcheck bestået. Mocks dækker manglende share, fejlet mount, forkert image og release af preflight-mount. Der er ikke kontaktet PCS-SRV1, monteret en rigtig ISO eller udført installation/tenantoperation her. Næste handling: test Get-ChildItem på share fra WinPE, bekræft den præcise share-stavning og afprøv preflight; derefter faktisk Evaluation/OOBE-forløb og tidtagning.
