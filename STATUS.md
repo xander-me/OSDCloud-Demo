@@ -43,3 +43,15 @@ Seneste mandat: Alexander bad om at slette disken som normal OSDCloud og underst
 
 
 Seneste brugerpræference: behold single-file-funktionen i OSDCloud_Start.ps1 og ret startupfejlen dér. Efter afklaring bevares den tidligere aftalte Graph/OOBE-flow, ikke den gamle JSON/GroupX/forfatter-hostede kæde. OSDCloudLogic og Windows-settings er nu flyttet tilbage i startupfilen med et eksplicit kald nederst og fejlpauser/log. Ingen import af installationsfunktionen fra modulet. Modulet er kun OOBE-hjælpere/appliste; Group Tag indtastes ved OOBE. Dansk 25H2, Hyper-V/Proxmox, én lokal disk 0 og native OSDCloud wipe bevares. De seks startupcases udfører den konkrete inline-kode via Invoke-Expression med mocked engine/network; 12 supporting testgrupper og syntakschecks består. Ingen reel Windows/disk/tenantoperation udført. Den først foreslåede uændrede genaktivering af den gamle helper-kæde blev afvist af automatisk approval review; denne implementering udelader den kæde og følger brugerens afklaring. Næste handling: test samme StartURL på brugerens VM.
+
+## 2026-11-08 — Aktuel rettelse: inline JSON-flow
+
+Dette afsnit erstatter tidligere beskrivelser af den aktive direkte Graph/helper-arkitektur. Brugeren ønsker sin inline OSDCloudLogic bevaret og AutopilotOOBE JSON anvendt.
+
+Rettet: gyldig GroupTag/GroupTagOptions, PostAction Quit, automatisk funktionskald, WinPE/VM/diskkontrol, eksplicit Retail, OSDClouds native wipeflag, ingen automatisk engine-reboot, completion-kontrol før staging, lokal OOBE.cmd med AutopilotOOBE og OOBEDeploy, bevaring af SetupComplete og stop/pause ved fejl. Overflødig Surface-driverpakkehentning er fjernet fra VM-flowet. Automatiske Windows-/driveropdateringer og profilventetid er fravalgt for demoen.
+
+Tenantkontrol accepterer en eksisterende serial/tag-registrering med et konfigureret tag; den beviser ikke en ny import eller profiltildeling. Afhængigheder er kun delvist versionsfastlagt. OOBE.ps1 og den indlejrede kopi holdes ens via test.
+
+Næste handling: afprøv samme ISO på Hyper-V/Proxmox med én disk, verificér dansk OOBE og den valgte Group Tag i den korrekte demo-tenant; mål hele forløbet. Windows/WinPE/ISO/Graph/tenant-runtime er IKKE kørt her.
+
+Validering: 9 startup-mockcases og 5 OOBE-mockcases bestået samt syntakskontrol af alle PowerShell-filer og git diff --check. Ingen disk-, app- eller tenantoperation udført. tests/Foundation.Tests.ps1 er samlet indgang til de aktuelle tests; ældre tests af den erstattede helper-arkitektur er erstattet. Alle ændringer publiceres via PR; ingen lokale ændringer forventes efter merge.
