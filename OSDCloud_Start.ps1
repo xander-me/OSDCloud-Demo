@@ -183,3 +183,5 @@ function OSDCloudLogic {
     Start-Sleep -Seconds 20
     wpeutil reboot
 }
+
+OSDCloudLogic -ComputerPrefix 'DEMO'
