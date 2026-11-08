@@ -20,7 +20,7 @@ function Run-StartupCase([string]$Mode,[string]$Choice='DEMO') {
         param($Name,[switch]$Force,$ErrorAction)
         if ($global:StartupCase -eq 'ModuleFailure') { throw 'TEST: module failed to load' }
     }
-    function Start-DemoInstallation { param($BundlePath); $global:StartupInstallCalls++ }
+    function OSDCloudLogic { param($BundlePath); $global:StartupInstallCalls++ }
     $beforeDrive=$env:SystemDrive; $beforeTemp=$env:TEMP; $beforeTLS=[Net.ServicePointManager]::SecurityProtocol
     $global:StartupCaught=''
     try {

@@ -10,7 +10,7 @@ try {
         $transcribing = $true
     } catch { Write-Warning "Cannot start transcript: $($_.Exception.Message)" }
     if ($env:SystemDrive -ne 'X:') { throw 'Run this startup script from WinPE.' }
-    $choice = Read-Host 'Type DEMO to install Windows 11 25H2 x64 / English / Pro'
+    $choice = Read-Host 'Type DEMO to install Windows 11 25H2 x64 / Dansk / Pro'
     if ($choice.Trim() -ine 'DEMO') { Write-Host 'Cancelled. No deployment started.'; return }
 
     # Windows PowerShell/WinPE may otherwise negotiate an older TLS version.
@@ -32,7 +32,7 @@ try {
     Write-Host '[3/4] Loading the demo module...'
     Import-Module "$bundle\OSDCloudModules\Module.psm1" -Force -ErrorAction Stop
     Write-Host '[4/4] Checking the VM and starting OSDCloud...'
-    Start-DemoInstallation -BundlePath $bundle
+    OSDCloudLogic -BundlePath $bundle
     # A successful deployment normally reboots WinPE. Do not silently close if it returns.
     Write-Host 'The deployment command returned. Check its messages before continuing.'
     $null = Read-Host 'Press Enter to close this startup window'
