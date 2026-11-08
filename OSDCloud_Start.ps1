@@ -1,8 +1,4 @@
 function OSDCloudLogic {
-    param (
-        [Parameter(ParameterSetName = 'ComputerPrefix', Mandatory = $true)]
-        [string]$ComputerPrefix
-    )
     #================================================
     #   [PreOS] Update Module
     #================================================
@@ -93,13 +89,6 @@ function OSDCloudLogic {
     #  [PostOS] AutopilotOOBE Configuration Staging
     #================================================
     Write-Host -ForegroundColor Cyan "Create C:\ProgramData\OSDeploy\OSDeploy.AutopilotOOBE.json"
-    Write-Host -ForegroundColor Gray "Define Computername"
-    $Serial = Get-WmiObject Win32_bios | Select-Object -ExpandProperty SerialNumber
-    $TargetComputername = $Serial.Substring(0,9)
-
-    $AssignedComputerName = "$ComputerPrefix-AkosCloud-$TargetComputername"
-    Write-Host -ForegroundColor Green $AssignedComputerName
-
     $AutopilotOOBEJson = @"
     {
         "Assign":  {
@@ -184,4 +173,4 @@ function OSDCloudLogic {
     wpeutil reboot
 }
 
-OSDCloudLogic -ComputerPrefix 'DEMO'
+OSDCloudLogic
