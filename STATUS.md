@@ -4,7 +4,7 @@
 
 Mandat: Alexander har efter oprydning godkendt et nyt, enkelt GitHub-grundlag: én URL, profilen DEMO, Windows 11 25H2 x64 en-us, online Graph-registrering med Group Tag AutopilotOOBE, verificering, eksakt appallowlist og genstart til OOBE. Ingen JSON-registrering eller genbrug af den kasserede GT Tech Day-implementation.
 
-Arbejdssted: xander-me/OSDCloud-Demo. Selvstændigt offentligt demo-code-repo begrundes med en anonymt læsbar startup-URL og en lille rodstruktur; det private gt-tech-day ejer fortsat eventplanlægning. Vanilla OSDCloud og andre eksisterende repositories ændres ikke.
+Arbejdssted: xander-me/OSDCloud-Demo, `main`. Foundation publiceret via [PR #1](https://github.com/xander-me/OSDCloud-Demo/pull/1), mergecommit `37cd90f`. Afprøvning følges i [issue #2](https://github.com/xander-me/OSDCloud-Demo/issues/2). Selvstændigt offentligt demo-code-repo begrundes med en anonymt læsbar startup-URL og en lille rodstruktur; det private gt-tech-day ejer fortsat eventplanlægning. Vanilla OSDCloud og andre eksisterende repositories ændres ikke.
 
 Udført: læsbart settingsmodul, commit-fast bundlehentning, blank Hyper-V-diskguard, CLI-kald med eksplicitte settings, lokal OOBE.cmd, Graph-baseret onlinekald, serial/tag-verificering før appfjernelse og ingen genstart ved fejl. OOBE starter manuelt med Shift+F10 → OOBE.
 
