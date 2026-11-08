@@ -1,120 +1,186 @@
-# Single-file installation function. Windows settings are in the [OS] section below.
 function OSDCloudLogic {
-    [CmdletBinding()]
-    param()
-    $ErrorActionPreference = 'Stop'
-    if ($env:SystemDrive -ne 'X:' -or -not (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT')) { throw 'Start installation from WinPE.' }
-    $machine = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
-    $manufacturer = ([string]$machine.Manufacturer).Trim()
-    $model = ([string]$machine.Model).Trim()
-    $hyperV = $manufacturer -ieq 'Microsoft Corporation' -and $model -ieq 'Virtual Machine'
-    # Proxmox uses QEMU/KVM. Match known manufacturer/model pairs, not any virtual-looking name.
-    $qemu = $manufacturer -ieq 'QEMU' -and $model -iin @(
-        'Standard PC (Q35 + ICH9, 2009)',
-        'Standard PC (i440FX + PIIX, 1996)',
-        'KVM'
+    param (
+        [Parameter(ParameterSetName = 'ComputerPrefix', Mandatory = $true)]
+        [string]$ComputerPrefix
     )
-    $kvm = $manufacturer -iin @('Red Hat','KVM') -and $model -ieq 'KVM'
-    if (-not ($hyperV -or $qemu -or $kvm)) {
-        throw "A dedicated Hyper-V or Proxmox/QEMU/KVM VM is required. Detected manufacturer='$manufacturer', model='$model'. Custom SMBIOS identities require review."
-    }
-    Write-Host "Demo VM recognized: $manufacturer / $model"
-    $disks = @(Get-Disk | Where-Object { $_.BusType -ne 'USB' })
-    if ($disks.Count -ne 1 -or $disks[0].Number -ne 0) { throw 'Exactly one local virtual disk numbered 0 is required.' }
     #================================================
-    #   [PreOS] Demo files and OSD module
+    #   [PreOS] Update Module
     #================================================
-    # Download OOBE helpers before any disk change. The install function stays in THIS file.
-    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-    $repository = 'xander-me/OSDCloud-Demo'
-    Write-Host -ForegroundColor Cyan 'Downloading the OOBE helpers'
-    $headers = @{ 'User-Agent'='OSDCloud-Demo'; 'Cache-Control'='no-cache' }
-    $commit = (Invoke-RestMethod "https://api.github.com/repos/$repository/commits/main" -Headers $headers -TimeoutSec 20 -ErrorAction Stop).sha
-    if ($commit -cnotmatch '^[a-f0-9]{40}$') { throw 'Invalid demo revision.' }
-    $BundlePath = Join-Path $env:TEMP ('OSDCloud-Demo-' + [guid]::NewGuid().ToString('N'))
-    New-Item "$BundlePath\OSDCloudModules" -ItemType Directory -Force | Out-Null
-    foreach ($file in 'OOBE.ps1','OSDCloudModules/Module.psm1') {
-        Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/$repository/$commit/$file" -OutFile (Join-Path $BundlePath $file) -TimeoutSec 30 -ErrorAction Stop
-    }
-    $commit | Set-Content "$BundlePath\revision.txt" -Encoding ASCII
-    Write-Host "OOBE helper revision: $commit"
-    $OSDVersion = '26.10.16.1'
-    Write-Host -ForegroundColor Cyan "Loading OSD $OSDVersion"
-    if (-not (Get-Module OSD -ListAvailable | Where-Object { $_.Version -eq [version]$OSDVersion })) {
-        Install-Module OSD -RequiredVersion $OSDVersion -Scope AllUsers -Force -ErrorAction Stop
-    }
-    Import-Module OSD -RequiredVersion $OSDVersion -Force -ErrorAction Stop
 
-    #================================================
-    #   [OS] Windows settings -- edit these values
-    #================================================
+    Write-Host -ForegroundColor Cyan "Updating OSD PowerShell Module"
+    Install-Module OSD -Force
+
+    Write-Host  -ForegroundColor Cyan "Importing OSD PowerShell Module"
+    Import-Module OSD -Force   
+
+    #=======================================================================
+    #   [OS] Params and Start-OSDCloud
+    #=======================================================================
+    Write-Host -ForegroundColor Cyan "Set the Global Variables for a Driver Pack name --> none"
+    if (((Get-MyComputerModel) -like 'Virtual*') -or ((Get-MyComputerModel) -like 'VMware*')) {
+        Write-Host -ForegroundColor Cyan "Set the Global Variables for virtual machines"
+        $Global:MyOSDCloud = @{
+            DriverPackName = 'none'
+            SkipRecoveryPartition = $true
+        }
+    }
+    else {
+        $Global:MyOSDCloud = @{
+            DriverPackName = 'none'
+        }
+    }
+    
     $Params = @{
-        OSName       = 'Windows 11 25H2 x64'
-        OSEdition    = 'Pro'
-        OSLanguage   = 'da-dk'
-        OSActivation = 'Retail'
+        OSVersion = "Windows 11"
+        OSBuild = "25H2"
+        OSEdition = "Pro"
+        OSLanguage = “da-dk”
+        ZTI = $true
+        Firmware = $false
     }
-    $Params | Format-Table -AutoSize | Out-Host
-    Write-Host 'OSDCloud will wipe and repartition virtual disk 0. Existing data will be erased.'
-    # This demo accepts VMs only. No OEM driver-pack download or firmware update.
-    $global:MyOSDCloud = @{
-        # Use OSDCloud's own wipe and partitioning steps, including on an existing Windows disk.
-        SkipAllDiskSteps = $false
-        SkipClearDisk = $false
-        SkipNewOSDisk = $false
-        DriverPackName = 'none'
-        SkipRecoveryPartition = $true
-        SetupCompleteNoRestart = $true
-        ShutdownSetupComplete = $false
-        WindowsUpdate = $false
-        WindowsUpdateDrivers = $false
-        WindowsDefenderUpdate = $false
-    }
-    Start-OSDCloud @Params -SkipAutopilot -ZTI -Restart:$false -Shutdown:$false
-    if (-not $global:OSDCloud.TimeEnd -or -not (Test-Path 'C:\Windows\System32\Config\SYSTEM')) { throw 'OSDCloud did not report a completed Windows deployment.' }
+    Start-OSDCloud @Params
+
     #================================================
-    #   [PostOS] Stage local OOBE scripts
+    #  [PostOS] OOBEDeploy Configuration
     #================================================
-    $destination = 'C:\ProgramData\OSDCloud-Demo'
-    New-Item "$destination\OSDCloudModules" -ItemType Directory -Force | Out-Null
-    foreach ($file in 'OOBE.ps1','OSDCloudModules/Module.psm1','revision.txt') {
-        $source = Join-Path $BundlePath $file
-        $target = Join-Path $destination $file
-        Copy-Item -LiteralPath $source -Destination $target -Force -ErrorAction Stop
-        if ((Get-FileHash $source -Algorithm SHA256).Hash -ne (Get-FileHash $target -Algorithm SHA256).Hash) { throw "Staging verification failed: $file" }
+    Write-Host -ForegroundColor Cyan "Create C:\ProgramData\OSDeploy\OSDeploy.OOBEDeploy.json"
+    $OOBEDeployJson = @'
+    {
+        "Autopilot":  {
+                        "IsPresent":  false
+                    },
+        "RemoveAppx":  [
+                        "Microsoft.549981C3F5F10",
+                            "Microsoft.BingWeather",
+                            "Microsoft.GetHelp",
+                            "Microsoft.Getstarted",
+                            "Microsoft.Microsoft3DViewer",
+                            "Microsoft.MicrosoftOfficeHub",
+                            "Microsoft.MicrosoftSolitaireCollection",
+                            "Microsoft.MixedReality.Portal",
+                            "Microsoft.Office.OneNote",
+                            "Microsoft.People",
+                            "Microsoft.SkypeApp",
+                            "Microsoft.Wallet",
+                            "Microsoft.WindowsCamera",
+                            "microsoft.windowscommunicationsapps",
+                            "Microsoft.WindowsFeedbackHub",
+                            "Microsoft.WindowsMaps",
+                            "Microsoft.Xbox.TCUI",
+                            "Microsoft.XboxApp",
+                            "Microsoft.XboxGameOverlay",
+                            "Microsoft.XboxGamingOverlay",
+                            "Microsoft.XboxIdentityProvider",
+                            "Microsoft.XboxSpeechToTextOverlay",
+                            "Microsoft.YourPhone",
+                            "Microsoft.ZuneMusic",
+                            "Microsoft.ZuneVideo"
+                    ],
+        "UpdateDrivers":  {
+                            "IsPresent":  true
+                        },
+        "UpdateWindows":  {
+                            "IsPresent":  true
+                        }
     }
-    @'
-@echo off
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\OSDCloud-Demo\OOBE.ps1
-if errorlevel 1 (
-    echo DEMO STOPPED. Review C:\ProgramData\OSDCloud-Demo\OOBE.log
-    exit /b 1
-)
-'@ | Set-Content 'C:\Windows\System32\OOBE.cmd' -Encoding ASCII
-    # [PostOS] OSDCloud completed; boot Windows. OOBE registration runs later.
-    Write-Host 'Windows installed. At OOBE press Shift+F10 and run OOBE to register this demo VM.'
-    & wpeutil.exe reboot
-    if ($LASTEXITCODE -ne 0) { throw 'WinPE reboot failed.' }
-}
+'@
+    If (!(Test-Path "C:\ProgramData\OSDeploy")) {
+        New-Item "C:\ProgramData\OSDeploy" -ItemType Directory -Force | Out-Null
+    }
+    $OOBEDeployJson | Out-File -FilePath "C:\ProgramData\OSDeploy\OSDeploy.OOBEDeploy.json" -Encoding ascii -Force
+
+    #================================================
+    #  [PostOS] AutopilotOOBE Configuration Staging
+    #================================================
+    Write-Host -ForegroundColor Cyan "Create C:\ProgramData\OSDeploy\OSDeploy.AutopilotOOBE.json"
+    Write-Host -ForegroundColor Gray "Define Computername"
+    $Serial = Get-WmiObject Win32_bios | Select-Object -ExpandProperty SerialNumber
+    $TargetComputername = $Serial.Substring(0,9)
+
+    $AssignedComputerName = "$ComputerPrefix-AkosCloud-$TargetComputername"
+    Write-Host -ForegroundColor Green $AssignedComputerName
+
+    $AutopilotOOBEJson = @"
+    {
+        "Assign":  {
+                        "IsPresent":  true
+                    },
+        "GroupTag":  "$AssignedComputerName",
+        "AddToGroup": "GroupX",
+        "Hidden":  [
+                        "AssignedComputerName",
+                        "AssignedUser",
+                        "PostAction",
+                        "Assign"
+                    ],
+        "PostAction":  "Quit",
+        "Run":  "NetworkingWireless",
+        "Docs":  "https://google.com/",
+        "Title":  "Manual Autopilot Register"
+    }
+"@
+    If (!(Test-Path "C:\ProgramData\OSDeploy")) {
+        New-Item "C:\ProgramData\OSDeploy" -ItemType Directory -Force | Out-Null
+    }
+    $AutopilotOOBEJson | Out-File -FilePath "C:\ProgramData\OSDeploy\OSDeploy.AutopilotOOBE.json" -Encoding ascii -Force 
 
 
-# Defining OSDCloudLogic does not run it. This call starts the installation.
-$ErrorActionPreference = 'Stop'
-$log = Join-Path $env:TEMP 'OSDCloud-Demo-Startup.log'
-$transcribing = $false
-try {
-    try {
-        Start-Transcript -Path $log -Append -ErrorAction Stop | Out-Null
-        $transcribing = $true
-    } catch { Write-Warning "Cannot start transcript: $($_.Exception.Message)" }
-    OSDCloudLogic
-    $null = Read-Host 'The function returned. Press Enter after reviewing its output'
-} catch {
-    Write-Host -ForegroundColor Red "OSDCloud stopped: $($_.Exception.Message)"
-    Write-Host $_.InvocationInfo.PositionMessage
-    Write-Host "Startup log: $log"
-    $null = Read-Host 'Record the error above, then press Enter'
-    throw
-} finally {
-    if ($transcribing) { Stop-Transcript | Out-Null }
+    #================================================
+    #  [PostOS] SetupComplete CMD Command Line
+    #================================================
+    Write-Host -ForegroundColor Cyan "Create C:\Windows\Setup\Scripts\SetupComplete.cmd"
+    $SetupCompleteCMD = @'
+'@
+    $SetupCompleteCMD | Out-File -FilePath 'C:\Windows\Setup\Scripts\SetupComplete.cmd' -Encoding ascii -Width 2000 -Force
+
+    #=======================================================================
+    #  [PostOS] Params and Start-OSDCloud
+    #=======================================================================
+    If((Get-MyComputerManufacturer) -like "*Microsoft*")	
+        {									
+            Write-Host -ForegroundColor Cyan "Device manufacturer is Microsoft Corporation --> need to download some drivers"
+            $Get_Product_Info = (Get-MyComputerProduct)
+
+            Write-Host -ForegroundColor Gray "Getting OSDCloudDriverPackage for this $Get_Product_Info"
+            $DriverPack = Get-OSDCloudDriverPacks | Where-Object {($_.Product -contains $Get_Product_Info) -and ($_.OS -match $Params.OSVersion)}
+            
+            if ($DriverPack) {
+                [System.String]$DownloadPath = 'C:\Drivers'
+                if (-NOT (Test-Path "$DownloadPath")) {
+                    New-Item $DownloadPath -ItemType Directory -Force -ErrorAction Stop | Out-Null
+                }
+
+                $OutFile = Join-Path $DownloadPath $DriverPack.FileName
+
+                Write-Host -ForegroundColor Cyan "ReleaseDate: $($DriverPack.ReleaseDate)"
+                Write-Host -ForegroundColor Cyan "Name: $($DriverPack.Name)"
+                Write-Host -ForegroundColor Cyan "Product: $($DriverPack.Product)"
+                Write-Host -ForegroundColor Cyan "Url: $($DriverPack.Url)"
+                if ($DriverPack.HashMD5) {
+                    Write-Host -ForegroundColor Cyan "HashMD5: $($DriverPack.HashMD5)"
+                }
+                Write-Host -ForegroundColor Cyan "OutFile: $OutFile"
+
+                Save-WebFile -SourceUrl $DriverPack.Url -DestinationDirectory $DownloadPath -DestinationName $DriverPack.FileName
+
+                if (! (Test-Path $OutFile)) {
+                    Write-Warning "$((Get-Date).ToString('yyyy-MM-dd-HHmmss')) Driver Pack failed to download"
+                }
+
+                $DriverPack | ConvertTo-Json | Out-File "$OutFile.json" -Encoding ascii -Width 2000 -Force
+            }
+        }
+
+    #=======================================================================
+    #   Dump some variables
+    #=======================================================================
+    $Global:OSDCloud | Out-File C:\OSDCloud\Logs\OSDCloud_Variables.log -Force
+    $Global:OSDCloud.DriverPack | Out-File C:\OSDCloud\Logs\OSDCloud_DriverPack_Variables.log -Force
+
+    #=======================================================================
+    #   Restart-Computer
+    #=======================================================================
+    Write-Host  -ForegroundColor Cyan "Restarting in 20 seconds!"
+    Start-Sleep -Seconds 20
+    wpeutil reboot
 }
