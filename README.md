@@ -14,7 +14,6 @@ OSEdition    = 'Pro'
 OSLanguage   = 'en-us'          # English (United States)
 OSActivation = 'Retail'
 
-GroupTag = 'AutopilotOOBE'
 ```
 
 Samme sted ligger den korte liste over apps, der fjernes, hvis de er installeret: Solitaire, News og Clipchamp. Der matches eksakte pakkenavne.
@@ -36,10 +35,11 @@ Skriv **DEMO**. Startup viser source-commit og settings, installerer Windows og 
 
 Tryk **Shift+F10**, skriv **`OOBE`**, og log ind med en administrator fra den rigtige demo-tenant.
 
-1. `Get-WindowsAutopilotInfo -Online -GroupTag AutopilotOOBE` registrerer via Graph.
-2. Scriptet verificerer serienummer og Group Tag i Autopilot, før det fortsætter.
-3. Apps på listen fjernes, og fravær kontrolleres.
-4. Maskinen genstarter til OOBE efter succes.
+1. Indtast Group Tag ved prompten, fx `AutopilotOOBE` eller `Site-Copenhagen`. Tomt input stopper før registrering.
+2. `Get-WindowsAutopilotInfo -Online -GroupTag $groupTag` registrerer via Graph med det indtastede tag.
+3. Scriptet verificerer serienummer og Group Tag i Autopilot, før det fortsætter.
+4. Apps på listen fjernes, og fravær kontrolleres.
+5. Maskinen genstarter til OOBE efter succes.
 
 `OOBE.cmd` starter **ikke automatisk**. Ingen JSON-import, autologon eller lokale administratorændringer er tilføjet. Ingen apps eller tenant er ændret ved oprettelsen af dette repo. Et group tag opretter ikke en Entra-gruppe: demo-tenantens gruppe-/profiltildeling skal være forberedt, og registrering alene beviser ikke profiltilknytning/enrollment.
 
@@ -73,3 +73,6 @@ Ved OSDCloud V1 `StartURL`, der peger på `main`-URL'en, hentes opdateret startu
 Begge platforme accepteres nu i VM-kontrollen, både ved WinPE-installation og i OOBE-trinnet. Proxmox genkendes via de normale QEMU/Q35-, QEMU/i440FX- eller KVM-identiteter. Kravet er fortsat præcis én lokal RAW-disk nummer 0. En ændret SMBIOS-identitet kan kræve gennemgang; fejlteksten viser de registrerede manufacturer/model-værdier.
 
 Ved Proxmox skal WinPE kunne se disk og netværk. VirtIO-controller/netkort kan kræve drivere i bootmediet; valg af VM-platform i scriptet installerer ikke WinPE-drivere. Hverken den samlede Hyper-V- eller Proxmox-installation er verificeret her. Hvis `StartURL` peger på `main`, hentes rettelsen ved næste boot uden ISO-genbygning.
+
+
+Group Tag vælges nu først ved Windows OOBE; den indgår ikke i WinPE-profilen. Nye installationer henter automatisk de opdaterede scripts fra main. En VM, der allerede er installeret, bruger sin tidligere staged kopi under `C:\ProgramData\OSDCloud-Demo`; opdatér både OOBE.ps1 og modulet fra samme nye commit (samt revision.txt), før denne VM kan bruge den nye prompt. En ændring på GitHub opdaterer ikke de lokale OOBE-filer af sig selv.

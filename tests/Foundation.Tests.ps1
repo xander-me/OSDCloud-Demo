@@ -8,10 +8,23 @@ function MustThrow([scriptblock]$Action) {
     try { & $Action | Out-Null } catch { $failed=$true }
     if (-not $failed) { throw 'Expected a failure.' }
 }
-Check 'Readable settings select the agreed Windows and Group Tag' {
+Check 'Windows settings do not contain a fixed Group Tag' {
     $s=Get-DemoSettings
-    if ($s.Windows.OSName -ne 'Windows 11 25H2 x64' -or $s.Windows.OSLanguage -ne 'en-us' -or $s.GroupTag -ne 'AutopilotOOBE') { throw 'Unexpected demo settings.' }
+    if ($s.Windows.OSName -ne 'Windows 11 25H2 x64' -or $s.Windows.OSLanguage -ne 'en-us' -or $s.PSObject.Properties.Name -contains 'GroupTag') { throw 'Unexpected demo settings.' }
 }
+$global:DemoTestGroupTag=''
+function global:Read-Host { param($Prompt); $global:DemoTestGroupTag }
+Check 'OOBE accepts and trims the chosen Group Tag' {
+    $global:DemoTestGroupTag='  Site-Copenhagen  '
+    if ((Read-DemoGroupTag) -cne 'Site-Copenhagen') { throw 'Entered tag changed.' }
+}
+Check 'OOBE refuses blank tags and control characters' {
+    foreach ($value in @('', '   ', "Bad`nTag", "Bad`tTag")) {
+        $global:DemoTestGroupTag=$value
+        MustThrow { Read-DemoGroupTag }
+    }
+}
+Remove-Item Function:global:Read-Host
 $global:DemoTestMachine=$null
 function global:Get-CimInstance { param($ClassName,$ErrorAction); $global:DemoTestMachine }
 Check 'Hyper-V is accepted' {
@@ -73,16 +86,16 @@ Check 'Both platforms still reject missing, nonblank or multiple disks before mo
 $global:DemoTestDevices=@()
 function global:Get-AutopilotDevice { param($serial,$ErrorAction); $global:DemoTestDevices }
 Check 'Registration is accepted only for matching serial and Group Tag' {
-    $global:DemoTestDevices=@([pscustomobject]@{serialNumber='TEST-VM';groupTag='AutopilotOOBE'})
-    $result=Confirm-DemoRegistration -Serial TEST-VM -GroupTag AutopilotOOBE -Attempts 1 -DelaySeconds 0
+    $global:DemoTestDevices=@([pscustomobject]@{serialNumber='TEST-VM';groupTag='Site-Copenhagen'})
+    $result=Confirm-DemoRegistration -Serial TEST-VM -GroupTag Site-Copenhagen -Attempts 1 -DelaySeconds 0
     if ($result.serialNumber -ne 'TEST-VM') { throw 'Wrong device accepted.' }
     foreach ($devices in @(
         @(),
-        @([pscustomobject]@{serialNumber='OTHER';groupTag='AutopilotOOBE'}),
+        @([pscustomobject]@{serialNumber='OTHER';groupTag='Site-Copenhagen'}),
         @([pscustomobject]@{serialNumber='TEST-VM';groupTag='WRONG'})
     )) {
         $global:DemoTestDevices=$devices
-        MustThrow { Confirm-DemoRegistration -Serial TEST-VM -GroupTag AutopilotOOBE -Attempts 1 -DelaySeconds 0 }
+        MustThrow { Confirm-DemoRegistration -Serial TEST-VM -GroupTag Site-Copenhagen -Attempts 1 -DelaySeconds 0 }
     }
 }
 $global:DemoTestProvisioned=@(); $global:DemoTestInstalled=@(); $global:DemoTestRemoved=@()
