@@ -105,15 +105,14 @@ function OSDCloudLogic {
         "Assign":  {
                         "IsPresent":  true
                     },
-        "GroupTag":  "$AssignedComputerName",
-        "AddToGroup": "GroupX",
+        "GroupTag":  "OptionA", "OPTION B",
         "Hidden":  [
                         "AssignedComputerName",
                         "AssignedUser",
                         "PostAction",
                         "Assign"
                     ],
-        "PostAction":  "Quit",
+        "PostAction":  "Reboot",
         "Run":  "NetworkingWireless",
         "Docs":  "https://google.com/",
         "Title":  "Manual Autopilot Register"
