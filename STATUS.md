@@ -60,3 +60,7 @@ Validering: 9 startup-mockcases og 5 OOBE-mockcases bestået samt syntakskontrol
 ## 2026-11-08 — Gallery-fejl og gammel startup
 
 Brugerens output indeholder tidligere tekster, smart quotes i da-dk og tom SetupComplete. Den publicerede main-fil er kontrolleret via GitHub og indeholder ikke disse trin/quotes. Årsagen til den gamle kopi (cache eller tidligere download) er ikke bekræftet. Tilføjet synlig startuprevision 2026-11-08.2 og vejledning til frisk hentning. WinPE bruger installeret OSD 26.10.16.1 uden Gallery-kald; manglende version og fejlet Gallery-installation stopper med forklaring før diskændringer. Ingen fallback til en vilkårlig ældre modulversion. OOBE-flow og JSON er uændret. Mocktests kontrollerer genbrug uden Install-Module og stop ved Gallery-fejl; Windows/WinPE-netværksfejlen er ikke reproduceret lokalt.
+
+## 2026-11-08 — Proxmox lokal image-server
+
+Tilføjet proxmox/install-image-server.sh og dansk vejledning efter brugerens ønske. Ny unprivileged Debian LXC med Nginx, dedikeret read-only hostmappe, DHCP eller statisk IPv4, eksisterende ID afvises og fejl sletter ikke containeren. Ingen værtsnetværksændring/pakkeinstallation. Bash syntax, ShellCheck og tre mockscenarier består; ingen rigtig Proxmox-installation er kørt. Windows/Autopilot-scriptet er uændret. Næste handling: bruger kører installer, tilføjer dansk 25H2 WIM/ESD og tester HTTP fra WinPE; derefter tilpasses Windows-startup med faktisk URL og Pro-index.

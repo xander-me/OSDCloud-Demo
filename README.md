@@ -60,3 +60,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File X:\OSDCloud_Start.ps1
 ```
 
 Den sidste kommando starter automatisk installation med sletning af VM'ens eneste lokale disk 0. Hvis Gallery stadig fejler uden lokal OSD 26.10.16.1, stopper scriptet før diskændringer. Kontroller DNS, proxy, WinPE-uret og HTTPS-adgang; fejlen alene identificerer ikke hvilken af disse der fejler.
+
+## Lokal image-server på Proxmox
+
+Se [installationsvejledningen](proxmox/README.md) og [install-image-server.sh](proxmox/install-image-server.sh). Scriptet opretter en ny Debian LXC med Nginx og read-only adgang til en dedikeret mappe på værten. Det udskriver en lokal HTTP-URL. OSDCloud_Start.ps1 skal efterfølgende have den faktiske image-URL og korrekt Pro-imageindex; dette ændres først, når de kendes.
