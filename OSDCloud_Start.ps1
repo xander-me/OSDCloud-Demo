@@ -1,45 +1,55 @@
 function OSDCloudLogic {
+    $ErrorActionPreference = 'Stop'
     #================================================
-    #   [PreOS] Update Module
+    #   [PreOS] WinPE, VM and target disk
     #================================================
-
-    Write-Host -ForegroundColor Cyan "Updating OSD PowerShell Module"
-    Install-Module OSD -Force
-
-    Write-Host  -ForegroundColor Cyan "Importing OSD PowerShell Module"
-    Import-Module OSD -Force   
-
-    #=======================================================================
-    #   [OS] Params and Start-OSDCloud
-    #=======================================================================
-    Write-Host -ForegroundColor Cyan "Set the Global Variables for a Driver Pack name --> none"
-    if (((Get-MyComputerModel) -like 'Virtual*') -or ((Get-MyComputerModel) -like 'VMware*')) {
-        Write-Host -ForegroundColor Cyan "Set the Global Variables for virtual machines"
-        $Global:MyOSDCloud = @{
-            DriverPackName = 'none'
-            SkipRecoveryPartition = $true
-        }
+    if (-not (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Control\MiniNT')) {
+        throw 'Start this script from OSDCloud WinPE.'
     }
-    else {
-        $Global:MyOSDCloud = @{
-            DriverPackName = 'none'
-        }
+    $computer = Get-CimInstance Win32_ComputerSystem
+    $isVM = ($computer.Manufacturer -eq 'Microsoft Corporation' -and $computer.Model -eq 'Virtual Machine') -or
+        ($computer.Manufacturer -match 'QEMU|Red Hat|KVM' -and $computer.Model -match 'Standard PC|KVM|Virtual')
+    if (-not $isVM) { throw "Only Hyper-V/Proxmox demo VMs are supported: $($computer.Manufacturer) / $($computer.Model)" }
+    $disks = @(Get-Disk | Where-Object { $_.BusType -notin @('USB', 'SD', 'MMC') })
+    if ($disks.Count -ne 1 -or $disks[0].Number -ne 0) {
+        throw 'The demo requires exactly one local target disk, numbered 0.'
     }
-    
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Write-Host 'Loading OSD PowerShell module' -ForegroundColor Cyan
+    Install-Module OSD -RequiredVersion '26.10.16.1' -Force -ErrorAction Stop
+    Import-Module OSD -RequiredVersion '26.10.16.1' -Force -ErrorAction Stop
+
+    #================================================
+    #   [OS] Windows settings and native OSDCloud wipe
+    #================================================
+    $Global:MyOSDCloud = @{
+        DriverPackName = 'none'
+        SkipRecoveryPartition = $true
+        SkipAllDiskSteps = $false
+        SkipClearDisk = $false
+        SkipNewOSDisk = $false
+        SetupCompleteNoRestart = $true
+        ShutdownSetupComplete = $false
+        WindowsUpdate = $false
+        WindowsUpdateDrivers = $false
+        WindowsDefenderUpdate = $false
+    }
     $Params = @{
-        OSVersion = "Windows 11"
-        OSBuild = "25H2"
-        OSEdition = "Pro"
-        OSLanguage = “da-dk”
+        OSVersion = 'Windows 11'
+        OSBuild = '25H2'
+        OSEdition = 'Pro'
+        OSLanguage = 'da-dk'
+        OSActivation = 'Retail'
         ZTI = $true
         Firmware = $false
+        Restart = $false
+        Shutdown = $false
+        SkipAutopilot = $true
     }
-    Start-OSDCloud @Params
 
     #================================================
-    #  [PostOS] OOBEDeploy Configuration
+    #   OOBE settings (validated before disk modification)
     #================================================
-    Write-Host -ForegroundColor Cyan "Create C:\ProgramData\OSDeploy\OSDeploy.OOBEDeploy.json"
     $OOBEDeployJson = @'
     {
         "Autopilot":  {
@@ -73,104 +83,120 @@ function OSDCloudLogic {
                             "Microsoft.ZuneVideo"
                     ],
         "UpdateDrivers":  {
-                            "IsPresent":  true
+                            "IsPresent":  false
                         },
         "UpdateWindows":  {
-                            "IsPresent":  true
+                            "IsPresent":  false
                         }
     }
 '@
-    If (!(Test-Path "C:\ProgramData\OSDeploy")) {
-        New-Item "C:\ProgramData\OSDeploy" -ItemType Directory -Force | Out-Null
-    }
-    $OOBEDeployJson | Out-File -FilePath "C:\ProgramData\OSDeploy\OSDeploy.OOBEDeploy.json" -Encoding ascii -Force
-
-    #================================================
-    #  [PostOS] AutopilotOOBE Configuration Staging
-    #================================================
-    Write-Host -ForegroundColor Cyan "Create C:\ProgramData\OSDeploy\OSDeploy.AutopilotOOBE.json"
-    $AutopilotOOBEJson = @"
+    $AutopilotOOBEJson = @'
     {
-        "Assign":  {
-                        "IsPresent":  true
-                    },
-        "GroupTag":  "OptionA", "OPTION B",
-        "Hidden":  [
-                        "AssignedComputerName",
-                        "AssignedUser",
-                        "PostAction",
-                        "Assign"
-                    ],
-        "PostAction":  "Reboot",
-        "Run":  "NetworkingWireless",
-        "Docs":  "https://google.com/",
-        "Title":  "Manual Autopilot Register"
+        "Assign": { "IsPresent": false },
+        "GroupTag": "OptionA",
+        "GroupTagOptions": ["OptionA", "OPTION B"],
+        "Hidden": ["AssignedComputerName", "AssignedUser", "PostAction", "Assign", "AddToGroup", "Run", "Docs"],
+        "PostAction": "Quit",
+        "Title": "Autopilot registration"
     }
-"@
-    If (!(Test-Path "C:\ProgramData\OSDeploy")) {
-        New-Item "C:\ProgramData\OSDeploy" -ItemType Directory -Force | Out-Null
-    }
-    $AutopilotOOBEJson | Out-File -FilePath "C:\ProgramData\OSDeploy\OSDeploy.AutopilotOOBE.json" -Encoding ascii -Force 
-
-
-    #================================================
-    #  [PostOS] SetupComplete CMD Command Line
-    #================================================
-    Write-Host -ForegroundColor Cyan "Create C:\Windows\Setup\Scripts\SetupComplete.cmd"
-    $SetupCompleteCMD = @'
 '@
-    $SetupCompleteCMD | Out-File -FilePath 'C:\Windows\Setup\Scripts\SetupComplete.cmd' -Encoding ascii -Width 2000 -Force
 
-    #=======================================================================
-    #  [PostOS] Params and Start-OSDCloud
-    #=======================================================================
-    If((Get-MyComputerManufacturer) -like "*Microsoft*")	
-        {									
-            Write-Host -ForegroundColor Cyan "Device manufacturer is Microsoft Corporation --> need to download some drivers"
-            $Get_Product_Info = (Get-MyComputerProduct)
+    $deploy = $OOBEDeployJson | ConvertFrom-Json -ErrorAction Stop
+    $autopilot = $AutopilotOOBEJson | ConvertFrom-Json -ErrorAction Stop
+    if ($autopilot.PostAction -ne 'Quit' -or $autopilot.Assign.IsPresent -or
+        -not $autopilot.GroupTagOptions -or $autopilot.GroupTag -notin $autopilot.GroupTagOptions) {
+        throw 'Invalid Autopilot settings: use Quit, Assign false and a default tag from GroupTagOptions.'
+    }
+    if (-not $deploy.RemoveAppx -or $deploy.Autopilot.IsPresent -or
+        $deploy.UpdateWindows.IsPresent -or $deploy.UpdateDrivers.IsPresent) {
+        throw 'Use the app allowlist with Autopilot and automatic updates disabled in OOBEDeploy.'
+    }
+    Write-Host ($Params | Out-String) -ForegroundColor Cyan
+    Write-Host 'OSDCloud will erase and partition the VM target disk 0.' -ForegroundColor Yellow
+    $Global:OSDCloud = $null
+    Start-OSDCloud @Params
+    if (-not $Global:OSDCloud.TimeEnd -or -not (Test-Path 'C:\Windows\System32\Config\SYSTEM')) {
+        throw 'OSDCloud did not finish installing Windows. OOBE staging and reboot stopped.'
+    }
 
-            Write-Host -ForegroundColor Gray "Getting OSDCloudDriverPackage for this $Get_Product_Info"
-            $DriverPack = Get-OSDCloudDriverPacks | Where-Object {($_.Product -contains $Get_Product_Info) -and ($_.OS -match $Params.OSVersion)}
-            
-            if ($DriverPack) {
-                [System.String]$DownloadPath = 'C:\Drivers'
-                if (-NOT (Test-Path "$DownloadPath")) {
-                    New-Item $DownloadPath -ItemType Directory -Force -ErrorAction Stop | Out-Null
-                }
+    #================================================
+    #   [PostOS] Stage JSON and the local OOBE command
+    #================================================
+    New-Item 'C:\ProgramData\OSDeploy' -ItemType Directory -Force | Out-Null
+    $OOBEDeployJson | Out-File 'C:\ProgramData\OSDeploy\OSDeploy.OOBEDeploy.json' -Encoding utf8 -Force
+    $AutopilotOOBEJson | Out-File 'C:\ProgramData\OSDeploy\OSDeploy.AutopilotOOBE.json' -Encoding utf8 -Force
+    $OOBEScript = @'
+# Run manually at Windows OOBE: Shift+F10, then OOBE.
+$ErrorActionPreference = 'Stop'
+try {
+    if ($env:USERNAME -ne 'defaultuser0') { throw 'Run this at Windows OOBE as defaultuser0.' }
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $configPath = 'C:\ProgramData\OSDeploy'
+    $autopilot = Get-Content "$configPath\OSDeploy.AutopilotOOBE.json" -Raw | ConvertFrom-Json
+    $deploy = Get-Content "$configPath\OSDeploy.OOBEDeploy.json" -Raw | ConvertFrom-Json
+    if ($autopilot.PostAction -ne 'Quit' -or $autopilot.Assign.IsPresent) {
+        throw 'Use PostAction Quit and Assign false so registration can be checked before cleanup.'
+    }
+    Install-Module OSD -RequiredVersion '26.10.16.1' -Force -ErrorAction Stop
+    Import-Module OSD -RequiredVersion '26.10.16.1' -Force -ErrorAction Stop
+    Install-Module AutopilotOOBE -RequiredVersion '24.1.29.1' -Force -ErrorAction Stop
+    Import-Module AutopilotOOBE -RequiredVersion '24.1.29.1' -Force -ErrorAction Stop
+    Start-AutopilotOOBE
 
-                $OutFile = Join-Path $DownloadPath $DriverPack.FileName
-
-                Write-Host -ForegroundColor Cyan "ReleaseDate: $($DriverPack.ReleaseDate)"
-                Write-Host -ForegroundColor Cyan "Name: $($DriverPack.Name)"
-                Write-Host -ForegroundColor Cyan "Product: $($DriverPack.Product)"
-                Write-Host -ForegroundColor Cyan "Url: $($DriverPack.Url)"
-                if ($DriverPack.HashMD5) {
-                    Write-Host -ForegroundColor Cyan "HashMD5: $($DriverPack.HashMD5)"
-                }
-                Write-Host -ForegroundColor Cyan "OutFile: $OutFile"
-
-                Save-WebFile -SourceUrl $DriverPack.Url -DestinationDirectory $DownloadPath -DestinationName $DriverPack.FileName
-
-                if (! (Test-Path $OutFile)) {
-                    Write-Warning "$((Get-Date).ToString('yyyy-MM-dd-HHmmss')) Driver Pack failed to download"
-                }
-
-                $DriverPack | ConvertTo-Json | Out-File "$OutFile.json" -Encoding ascii -Width 2000 -Force
-            }
+    # Check tenant state after the UI returns. This also permits an existing
+    # registration with one of the configured tags; it does not prove a new import.
+    Import-Module WindowsAutopilotIntune -ErrorAction Stop
+    $serial = (Get-CimInstance Win32_BIOS).SerialNumber.Trim()
+    if ([string]::IsNullOrWhiteSpace($serial)) { throw 'No device serial number was found.' }
+    $registered = $false
+    for ($attempt = 0; $attempt -lt 12; $attempt++) {
+        $devices = @(Get-AutopilotDevice -serial $serial -ErrorAction Stop |
+            Where-Object { $_.serialNumber -eq $serial })
+        if ($devices.Count -eq 1 -and $devices[0].groupTag -in $autopilot.GroupTagOptions) {
+            $registered = $true
+            Write-Host "Autopilot registration found. Group Tag: $($devices[0].groupTag)" -ForegroundColor Green
+            break
         }
+        Start-Sleep -Seconds 10
+    }
+    if (-not $registered) { throw 'Autopilot serial/tag could not be verified. Cleanup and restart stopped.' }
 
-    #=======================================================================
-    #   Dump some variables
-    #=======================================================================
-    $Global:OSDCloud | Out-File C:\OSDCloud\Logs\OSDCloud_Variables.log -Force
-    $Global:OSDCloud.DriverPack | Out-File C:\OSDCloud\Logs\OSDCloud_DriverPack_Variables.log -Force
-
-    #=======================================================================
-    #   Restart-Computer
-    #=======================================================================
-    Write-Host  -ForegroundColor Cyan "Restarting in 20 seconds!"
+    Start-OOBEDeploy
+    # Confirm the requested packages are absent, including provisioned copies.
+    $remaining = @(Get-AppxPackage -AllUsers -ErrorAction Stop |
+        Where-Object { $_.Name -in $deploy.RemoveAppx })
+    $remaining += @(Get-AppxProvisionedPackage -Online -ErrorAction Stop |
+        Where-Object { $_.DisplayName -in $deploy.RemoveAppx })
+    if ($remaining.Count) { throw 'Some allowlisted apps remain. Check OOBEDeploy logs before restarting.' }
+    Restart-Computer -Force
+}
+catch {
+    Write-Host "OOBE failed: $($_.Exception.Message)" -ForegroundColor Red
+    Read-Host 'Press Enter to return to the command prompt'
+    throw
+}
+'@
+    $OOBEScript | Out-File 'C:\ProgramData\OSDeploy\OOBE.ps1' -Encoding utf8 -Force
+    $OOBECmd = @'
+@echo off
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\OSDeploy\OOBE.ps1
+if errorlevel 1 pause
+'@
+    $OOBECmd | Out-File 'C:\Windows\System32\OOBE.cmd' -Encoding ascii -Force
+    # Preserve the SetupComplete.cmd created by OSDCloud.
+    New-Item 'C:\OSDCloud\Logs' -ItemType Directory -Force | Out-Null
+    $Global:OSDCloud | Out-File 'C:\OSDCloud\Logs\OSDCloud_Variables.log' -Force
+    Write-Host 'At Windows OOBE: Shift+F10, then run OOBE.' -ForegroundColor Cyan
     Start-Sleep -Seconds 20
     wpeutil reboot
+    if ($LASTEXITCODE -ne 0) { throw 'WinPE reboot failed.' }
 }
 
-OSDCloudLogic
+try {
+    OSDCloudLogic
+}
+catch {
+    Write-Host "Deployment stopped: $($_.Exception.Message)" -ForegroundColor Red
+    Read-Host 'Press Enter after recording the error'
+    throw
+}

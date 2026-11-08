@@ -1,39 +1,49 @@
-# Run at Windows OOBE using Shift+F10 -> OOBE.
-# Registration uses Graph, with interactive administrator sign-in. No JSON registration.
+# Run manually at Windows OOBE: Shift+F10, then OOBE.
 $ErrorActionPreference = 'Stop'
-if ($env:SystemDrive -eq 'X:') { throw 'Autopilot registration runs in installed Windows, not WinPE.' }
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($identity)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'An elevated OOBE session is required.' }
-Import-Module "$PSScriptRoot\OSDCloudModules\Module.psm1" -Force -ErrorAction Stop
-Assert-DemoVM
-$settings = Get-DemoSettings
-$success = Join-Path $PSScriptRoot 'Completed.txt'
-if (Test-Path $success) { throw 'This demo already completed. Review the log before rerunning registration.' }
-Start-Transcript -Path "$PSScriptRoot\OOBE.log" -Append -ErrorAction Stop | Out-Null
 try {
-    Write-Host "Demo revision: $(Get-Content "$PSScriptRoot\revision.txt" -Raw)"
-    $groupTag = Read-DemoGroupTag
-    Write-Host "Sign in to the DEMO tenant. Group Tag: $groupTag"
-    Install-Script Get-WindowsAutopilotInfo -RequiredVersion $settings.AutopilotScriptVersion -Scope AllUsers -Force -ErrorAction Stop
-    $installed = Get-InstalledScript Get-WindowsAutopilotInfo -RequiredVersion $settings.AutopilotScriptVersion -ErrorAction Stop
-    $scriptPath = Join-Path $installed.InstalledLocation 'Get-WindowsAutopilotInfo.ps1'
-    & $scriptPath -Online -GroupTag $groupTag
+    if ($env:USERNAME -ne 'defaultuser0') { throw 'Run this at Windows OOBE as defaultuser0.' }
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $configPath = 'C:\ProgramData\OSDeploy'
+    $autopilot = Get-Content "$configPath\OSDeploy.AutopilotOOBE.json" -Raw | ConvertFrom-Json
+    $deploy = Get-Content "$configPath\OSDeploy.OOBEDeploy.json" -Raw | ConvertFrom-Json
+    if ($autopilot.PostAction -ne 'Quit' -or $autopilot.Assign.IsPresent) {
+        throw 'Use PostAction Quit and Assign false so registration can be checked before cleanup.'
+    }
+    Install-Module OSD -RequiredVersion '26.10.16.1' -Force -ErrorAction Stop
+    Import-Module OSD -RequiredVersion '26.10.16.1' -Force -ErrorAction Stop
+    Install-Module AutopilotOOBE -RequiredVersion '24.1.29.1' -Force -ErrorAction Stop
+    Import-Module AutopilotOOBE -RequiredVersion '24.1.29.1' -Force -ErrorAction Stop
+    Start-AutopilotOOBE
 
-    # Do not treat closing a window or returning from the script as proof of registration.
-    $serial = (Get-CimInstance Win32_BIOS -ErrorAction Stop).SerialNumber
-    if ([string]::IsNullOrWhiteSpace($serial)) { throw 'Device serial is unavailable.' }
-    $null = Get-Command Get-AutopilotDevice -ErrorAction Stop
-    $null = Confirm-DemoRegistration -Serial $serial -GroupTag $groupTag
-    Write-Host "Autopilot registration verified: $serial / $groupTag"
-    Remove-DemoApps -Names $settings.RemoveApps
-    "Completed $(Get-Date -Format o). Registration verified with Group Tag $groupTag; allowlisted apps absent." | Set-Content $success -Encoding UTF8
-    Write-Host 'DEMO complete. Restarting to OOBE in 10 seconds.'
-    Start-Sleep -Seconds 10
-} catch {
-    Write-Error "DEMO STOPPED: $($_.Exception.Message)" -ErrorAction Continue
-    exit 1
-} finally {
-    Stop-Transcript | Out-Null
+    # Check tenant state after the UI returns. This also permits an existing
+    # registration with one of the configured tags; it does not prove a new import.
+    Import-Module WindowsAutopilotIntune -ErrorAction Stop
+    $serial = (Get-CimInstance Win32_BIOS).SerialNumber.Trim()
+    if ([string]::IsNullOrWhiteSpace($serial)) { throw 'No device serial number was found.' }
+    $registered = $false
+    for ($attempt = 0; $attempt -lt 12; $attempt++) {
+        $devices = @(Get-AutopilotDevice -serial $serial -ErrorAction Stop |
+            Where-Object { $_.serialNumber -eq $serial })
+        if ($devices.Count -eq 1 -and $devices[0].groupTag -in $autopilot.GroupTagOptions) {
+            $registered = $true
+            Write-Host "Autopilot registration found. Group Tag: $($devices[0].groupTag)" -ForegroundColor Green
+            break
+        }
+        Start-Sleep -Seconds 10
+    }
+    if (-not $registered) { throw 'Autopilot serial/tag could not be verified. Cleanup and restart stopped.' }
+
+    Start-OOBEDeploy
+    # Confirm the requested packages are absent, including provisioned copies.
+    $remaining = @(Get-AppxPackage -AllUsers -ErrorAction Stop |
+        Where-Object { $_.Name -in $deploy.RemoveAppx })
+    $remaining += @(Get-AppxProvisionedPackage -Online -ErrorAction Stop |
+        Where-Object { $_.DisplayName -in $deploy.RemoveAppx })
+    if ($remaining.Count) { throw 'Some allowlisted apps remain. Check OOBEDeploy logs before restarting.' }
+    Restart-Computer -Force
 }
-Restart-Computer -Force
+catch {
+    Write-Host "OOBE failed: $($_.Exception.Message)" -ForegroundColor Red
+    Read-Host 'Press Enter to return to the command prompt'
+    throw
+}

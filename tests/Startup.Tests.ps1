@@ -1,60 +1,45 @@
-# Exercise the single-file StartURL through Invoke-Expression. All effects are mocked.
-$ErrorActionPreference='Stop'
-$source=Get-Content "$PSScriptRoot/../OSDCloud_Start.ps1" -Raw
-function Run-StartupCase([string]$Mode) {
-    $global:StartupMode=$Mode; $global:StartupPrompts=@(); $global:StartupEngineCalls=0; $global:StartupRequests=0
-    $global:StartupStoppedTranscript=$false; $global:StartupCaught=''; $global:StartupEngineArgs=$null
-    function Read-Host { param($Prompt); $global:StartupPrompts += $Prompt; return '' }
-    function Start-Transcript { param($Path,[switch]$Append,$ErrorAction) }
-    function Stop-Transcript { $global:StartupStoppedTranscript=$true }
-    function Test-Path { param($Path); return $true }
-    function Get-CimInstance {
-        param($ClassName,$ErrorAction)
-        if ($global:StartupMode -eq 'Physical') { return [pscustomobject]@{Manufacturer='Dell Inc.';Model='Physical PC'} }
-        [pscustomobject]@{Manufacturer='QEMU';Model='Standard PC (Q35 + ICH9, 2009)'}
-    }
-    function Get-Disk {
-        if ($global:StartupMode -eq 'MultipleDisks') { [pscustomobject]@{Number=1;BusType='SCSI';PartitionStyle='GPT'} }
-        [pscustomobject]@{Number=0;BusType='SCSI';PartitionStyle='GPT'}
-    }
-    function Invoke-RestMethod {
-        param($Uri,$Headers,$TimeoutSec,$ErrorAction)
-        $global:StartupRequests++
-        if ($global:StartupMode -eq 'GitHubFailure') { throw 'TEST: GitHub connection failed' }
-        [pscustomobject]@{sha=('a'*40)}
-    }
-    function Invoke-WebRequest { param([switch]$UseBasicParsing,$Uri,$OutFile,$TimeoutSec,$ErrorAction) }
-    function New-Item { param($Path,$ItemType,[switch]$Force) }
-    function Set-Content { param($Path,$Value,$Encoding) }
-    function Get-Module { param($Name,[switch]$ListAvailable); [pscustomobject]@{Version=[version]'26.10.16.1'} }
-    function Import-Module {
-        param($Name,$RequiredVersion,[switch]$Force,$ErrorAction)
-        if ($global:StartupMode -eq 'ModuleFailure') { throw 'TEST: module failed to load' }
-    }
-    function Start-OSDCloud {
-        param($OSName,$OSEdition,$OSLanguage,$OSActivation,[switch]$SkipAutopilot,[switch]$ZTI,[switch]$Restart,[switch]$Shutdown)
-        if ($global:StartupPrompts.Count) { throw 'Unexpected prompt before installation.' }
-        $global:StartupEngineCalls++
-        $global:StartupEngineArgs=@{}+$PSBoundParameters
-        throw 'TEST: stopped at mocked OSD engine; no disk operation performed'
-    }
-    $drive=$env:SystemDrive; $temp=$env:TEMP; $tls=[Net.ServicePointManager]::SecurityProtocol
-    $overrides=Get-Variable MyOSDCloud -Scope Global -ErrorAction SilentlyContinue
-    try {
-        $env:SystemDrive=if ($Mode -eq 'NotWinPE') {'C:'} else {'X:'}; $env:TEMP=[IO.Path]::GetTempPath()
-        Invoke-Expression $source
-    } catch { $global:StartupCaught=$_.Exception.Message }
-    finally {
-        $env:SystemDrive=$drive; $env:TEMP=$temp; [Net.ServicePointManager]::SecurityProtocol=$tls
-        if ($overrides) { $global:MyOSDCloud=$overrides.Value } else { Remove-Variable MyOSDCloud -Scope Global -ErrorAction SilentlyContinue }
-    }
+$ErrorActionPreference = 'Stop'
+$source = Get-Content "$PSScriptRoot/../OSDCloud_Start.ps1" -Raw
+$tokens=$null; $errors=$null
+$ast=[System.Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors)
+if ($errors.Count) { throw ($errors | Out-String) }
+$body=$ast.Find({param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'OSDCloudLogic'},$true)
+Invoke-Expression $body.Extent.Text
+function Assert($condition,$message) { if (-not $condition) { throw $message } }
+function Test-Path { param($Path); if ($script:mode -eq 'NotWinPE' -and $Path -like 'HKLM:*') { return $false }; return $true }
+function Get-CimInstance { param($ClassName); if ($script:mode -eq 'Physical') { return [pscustomobject]@{Manufacturer='Dell';Model='PC'} }; if ($script:mode -eq 'HyperV') { return [pscustomobject]@{Manufacturer='Microsoft Corporation';Model='Virtual Machine'} }; [pscustomobject]@{Manufacturer='QEMU';Model='Standard PC (Q35 + ICH9, 2009)'} }
+function Get-Disk { if ($script:mode -eq 'MultipleDisks') { [pscustomobject]@{Number=1;BusType='SCSI'} }; [pscustomobject]@{Number=0;BusType='SCSI';PartitionStyle='GPT'} }
+function Install-Module { param($Name,$RequiredVersion,[switch]$Force,$ErrorAction); if ($script:mode -eq 'ModuleFailure') { throw 'Module failed' } }
+function Import-Module { param($Name,$RequiredVersion,[switch]$Force,$ErrorAction) }
+function Start-OSDCloud {
+    param($OSVersion,$OSBuild,$OSEdition,$OSLanguage,$OSActivation,$ZTI,$Firmware,$Restart,$Shutdown,$SkipAutopilot)
+    $script:calls++; $script:settings=@{}+$PSBoundParameters
+    Assert (-not $Global:MyOSDCloud.SkipClearDisk -and -not $Global:MyOSDCloud.SkipNewOSDisk -and -not $Global:MyOSDCloud.SkipAllDiskSteps) 'Native wipe disabled'
+    if ($script:mode -eq 'EngineFailure') { throw 'Engine failed' }
+    if ($script:mode -ne 'Incomplete') { $Global:OSDCloud=@{TimeEnd=Get-Date} }
 }
-foreach ($mode in 'GitHubFailure','ModuleFailure','NotWinPE','Physical','MultipleDisks') {
-    Run-StartupCase $mode
-    if ($global:StartupEngineCalls -ne 0 -or $global:StartupPrompts.Count -ne 1 -or -not $global:StartupCaught -or -not $global:StartupStoppedTranscript) { throw "Failure did not stop visibly before the engine: $mode" }
-    Write-Host "PASS $mode stops before installation and pauses on error"
+function New-Item { param($Path,$ItemType,[switch]$Force) }
+function Out-File { param([Parameter(ValueFromPipeline)] $InputObject,[Parameter(Position=0)]$FilePath,$Encoding,[switch]$Force); process { $script:files[$FilePath]=[string]$InputObject } }
+function Start-Sleep { param($Seconds) }
+function wpeutil { param($command); $script:reboot++; $global:LASTEXITCODE=0 }
+foreach ($mode in 'NotWinPE','Physical','MultipleDisks','ModuleFailure','EngineFailure','Incomplete','HyperV','Proxmox') {
+    $script:mode=$mode; $script:calls=0; $script:reboot=0; $script:files=@{}; $caught=$false
+    try { OSDCloudLogic } catch { $caught=$true }
+    if ($mode -in 'HyperV','Proxmox') {
+        Assert (-not $caught -and $script:reboot -eq 1 -and $script:calls -eq 1) "$mode did not complete mocked staging"
+        Assert ($script:settings.OSBuild -eq '25H2' -and $script:settings.OSLanguage -eq 'da-dk' -and $script:settings.OSActivation -eq 'Retail') 'Wrong Windows settings'
+        Assert (-not $script:settings.Restart -and -not $script:settings.Shutdown -and $script:settings.SkipAutopilot) 'Unexpected engine handoff'
+        $config=$script:files['C:\ProgramData\OSDeploy\OSDeploy.AutopilotOOBE.json'] | ConvertFrom-Json
+        Assert ($config.PostAction -eq 'Quit' -and $config.GroupTagOptions.Count -eq 2) 'Invalid Autopilot JSON'
+        Assert (-not $script:files.ContainsKey('C:\Windows\Setup\Scripts\SetupComplete.cmd')) 'SetupComplete overwritten'
+        Assert ($script:files['C:\ProgramData\OSDeploy\OOBE.ps1'].Trim() -eq (Get-Content "$PSScriptRoot/../OOBE.ps1" -Raw).Trim()) 'Embedded OOBE differs'
+    } else { Assert ($caught -and $script:reboot -eq 0 -and $script:files.Count -eq 0) "$mode did not stop before staging/reboot" }
+    Write-Host "PASS startup $mode"
 }
-Run-StartupCase 'EngineReached'
-if ($global:StartupEngineCalls -ne 1 -or $global:StartupEngineArgs.OSName -ne 'Windows 11 25H2 x64' -or $global:StartupEngineArgs.OSLanguage -ne 'da-dk' -or $global:StartupCaught -notlike 'TEST: stopped at mocked OSD engine*') { throw 'Inline function was not called with the Danish settings.' }
-Write-Host 'PASS single-file definition is invoked automatically with Windows 11 25H2 / da-dk'
-Write-Host '6 startup mock cases passed; no disk, download, app removal or tenant operation executed.'
+# A broken central setting must fail before the engine is reached.
+$bad=$body.Extent.Text.Replace('"GroupTag": "OptionA",','"GroupTag": "OptionA", "bad",')
+Invoke-Expression $bad
+$script:calls=0; $caught=$false
+try { OSDCloudLogic } catch { $caught=$true }
+Assert ($caught -and $script:calls -eq 0) 'Malformed JSON reached engine'
+Write-Host 'PASS malformed JSON stops before installation'
