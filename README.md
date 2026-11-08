@@ -59,3 +59,10 @@ WinPE skal have PowerShell, WMI/StorageWMI, netværk, TLS og fungerende Gallery-
 Afprøv Windows-installation, faktisk OOBE-handoff, Graph-login/import, appfjernelse og genstart. Bekræft demo-tenant og grupperegel før import. Rehearsal skal måle den samlede tid; Graph-scriptets import-/synkroniseringsventetid kan overstige 20 minutter. Opbevar ikke hardwarehash, tokens, serienumre eller kundedata i GitHub.
 
 Kilder: [Microsofts online-registrering](https://learn.microsoft.com/en-us/autopilot/add-devices), [Group Tag og grupper](https://learn.microsoft.com/en-us/autopilot/enrollment-autopilot). Layout inspireret af [AkosBakos/OSDCloud](https://github.com/AkosBakos/OSDCloud); ingen af dets scripts er kopieret.
+
+
+## Hvis startupvinduet lukker
+
+Startup viser nu fire trin og bliver stående ved fejl, indtil du trykker Enter. Kopiér fejlteksten før vinduet lukkes. Log: `%TEMP%\OSDCloud-Demo-Startup.log` (normalt `X:\Windows\Temp\OSDCloud-Demo-Startup.log` i WinPE). `DEMO` accepteres også med små bogstaver og omgivende mellemrum. TLS 1.2 aktiveres før GitHub-kald.
+
+Ved OSDCloud V1 `StartURL`, der peger på `main`-URL'en, hentes opdateret startupkode ved næste boot; ISO'en skal ikke genbygges for denne scriptrettelse. Genstart kun det dedikerede test-VM-forløb. Den oprindelige fejlårsag skal stadig identificeres ud fra den synlige fejl/log; diagnosticering alene beviser ikke, at deployment virker i WinPE.
