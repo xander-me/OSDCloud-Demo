@@ -1,38 +1,34 @@
-# Run in OSDCloud WinPE: .\Start-TechDayOSDCloud.ps1
-# Store this script in GitHub and run it using its Raw URL.
+# Run in OSDCloud WinPE, locally or using this script's GitHub Raw URL.
+# WARNING: Installation starts automatically and erases the target disk.
 
 $ErrorActionPreference = 'Stop'
 
-# 1. Demo settings - change these in GitHub before running the script again.
-$DemoTitle = 'Tech Day - Config from GitHub - v1'
-$DemoColor = '#0078D4'
+# 1. Windows settings - edit these in GitHub.
 $OSDVersion = '26.10.16.1'
-
 $WindowsSettings = @{
-    Name       = 'Windows 11 25H2 x64'
-    Version    = 'Windows 11'
-    ReleaseID  = '25H2'
-    Edition    = 'Enterprise'
-    Language   = 'en-us'
-    Activation = 'Volume'
-    ImageIndex = 0
+    OSName        = 'Windows 11 25H2 x64'
+    OSEdition     = 'Enterprise'
+    OSLanguage    = 'en-us'
+    OSActivation  = 'Volume'
+    ZTI           = $true       # Start without installation questions.
+    SkipAutopilot = $true
+    SkipODT       = $true
+    Restart       = $false      # Leave the result on screen for the demo.
 }
 
-# 2. Load OSD. Download it only if this version is missing from WinPE.
+# 2. Load OSD. Install missing prerequisites without confirmation prompts.
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 if (-not (Get-Module OSD -ListAvailable | Where-Object Version -EQ $OSDVersion)) {
-    Install-Module OSD -RequiredVersion $OSDVersion -Force
+    Install-PackageProvider -Name NuGet -MinimumVersion '2.8.5.201' -Force -Confirm:$false | Out-Null
+    Install-Module OSD -RequiredVersion $OSDVersion -Scope AllUsers -Force -AllowClobber -Confirm:$false
 }
 
 Import-Module OSD -RequiredVersion $OSDVersion -Force
 
-# 3. Apply the Windows defaults used by the native OSDCloud GUI.
-$Global:OSDModuleResource.OSDCloud.Default = $WindowsSettings
-$Global:OSDModuleResource.StartOSDCloudGUI.ClearDiskConfirm = $true
-$Global:OSDModuleResource.StartOSDCloudGUI.restartComputer = $false
+# 3. Clear settings from earlier runs, then start the normal OSDCloud workflow.
+$Global:StartOSDCloudGUI = $null
+$Global:MyOSDCloud = @{}
 
-# 4. Open the GUI. For the demo, show the choices and then close it.
-# Starting an installation in the GUI can erase the selected disk.
-Write-Host $DemoTitle -ForegroundColor Cyan
-Start-OSDCloudGUI -BrandName $DemoTitle -BrandColor $DemoColor
+Write-Host 'Starting Windows 11 25H2 Enterprise (en-us)' -ForegroundColor Cyan
+Start-OSDCloud @WindowsSettings
